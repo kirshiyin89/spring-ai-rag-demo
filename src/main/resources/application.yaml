@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: fintech-ai-assistant
+  ai:
+    openai:
+      api-key: ${GROQ_API_KEY}
+      base-url: https://api.groq.com/openai/v1
+      chat:
+        model: openai/gpt-oss-120b
+        extra-body:
+          include_reasoning: false
+    model:
+      embedding: transformers
