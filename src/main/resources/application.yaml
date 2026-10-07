@@ -1,6 +1,12 @@
 spring:
   application:
     name: fintech-ai-assistant
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ragdb
+    username: raguser
+    password: ragpassword
+
   ai:
     openai:
       api-key: ${GROQ_API_KEY}
@@ -9,5 +15,11 @@ spring:
         model: openai/gpt-oss-120b
         extra-body:
           include_reasoning: false
+
     model:
       embedding: transformers
+
+    vectorstore:
+      type: pgvector
+      pgvector:
+        initialize-schema: true
