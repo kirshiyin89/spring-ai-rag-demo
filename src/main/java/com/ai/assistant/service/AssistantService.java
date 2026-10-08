@@ -45,13 +45,21 @@ public class AssistantService {
 
   public String askWithRag(
       String conversationId,
-      String question) {
+      String question,
+      String category) {
+
+    SearchRequest.Builder searchRequest = SearchRequest.builder()
+        .query(question)
+        .topK(2);
+
+    if (category != null && !category.isBlank()) {
+      searchRequest.filterExpression(
+          "category == '" + category + "'"
+      );
+    }
 
     List<Document> documents = vectorStore.similaritySearch(
-        SearchRequest.builder()
-            .query(question)
-            .topK(2)
-            .build()
+        searchRequest.build()
     );
 
     documents.forEach(document ->

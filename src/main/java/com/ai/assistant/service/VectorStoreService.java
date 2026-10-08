@@ -27,6 +27,48 @@ public class VectorStoreService {
         .build();
   }
 
+  private Map<String, Object> createMetadata(String filename) {
+
+    return switch (filename) {
+      case "company-overview.md" -> Map.of(
+          "filename", filename,
+          "category", "company",
+          "department", "IT"
+      );
+      case "new-employee-onboarding.md" -> Map.of(
+          "filename", filename,
+          "category", "onboarding",
+          "department", "IT"
+      );
+      case "gitlab-access.md" -> Map.of(
+          "filename", filename,
+          "category", "access",
+          "department", "IT"
+      );
+      case "vpn-and-wlan-access.md" -> Map.of(
+          "filename", filename,
+          "category", "network",
+          "department", "IT"
+      );
+      case "laptop-request.md", "equipment-request.md" -> Map.of(
+          "filename", filename,
+          "category", "hardware",
+          "department", "IT"
+      );
+      case "software-license-request.md" -> Map.of(
+          "filename", filename,
+          "category", "software",
+          "department", "IT"
+      );
+      default -> Map.of(
+          "filename", filename,
+          "category", "other",
+          "department", "IT"
+      );
+    };
+
+  }
+
   public void loadDocuments() throws IOException {
 
     Resource[] resources = new PathMatchingResourcePatternResolver()
@@ -39,12 +81,24 @@ public class VectorStoreService {
           StandardCharsets.UTF_8
       );
 
-      Document document = new Document(
-          content,
-          Map.of("filename", Objects.requireNonNull(resource.getFilename()))
+      Map<String, Object> metadata = Map.of(
+          "filename", Objects.requireNonNull(resource.getFilename()),
+          "source", "onboarding",
+          "documentType", "internal-documentation"
       );
 
+      String filename = Objects.requireNonNull(resource.getFilename());
+
+      Document document = new Document(
+          content,
+          createMetadata(filename)
+      );
       List<Document> chunks = textSplitter.apply(List.of(document));
+
+      for (Document chunk : chunks) {
+        log.info("TEXT:\n{}", chunk.getText());
+        log.info("METADATA:\n{}", chunk.getMetadata());
+      }
 
       vectorStore.add(chunks);
 
