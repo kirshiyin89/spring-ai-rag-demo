@@ -27,13 +27,10 @@ public class ChatController {
     @GetMapping("/rag")
     public String rag(
         @RequestParam String conversationId,
-        @RequestParam String question,
-        @RequestParam(required = false) String category) {
+        @RequestParam String question) {
 
         return assistantService.askWithRag(
             conversationId,
-            question,
-            category
-        );
+            question);
     }
 }

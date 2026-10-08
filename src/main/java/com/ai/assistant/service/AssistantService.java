@@ -24,13 +24,15 @@ public class AssistantService {
   private final Resource systemPromptResource;
   private final Resource userPromptResource;
   private final VectorStore vectorStore;
+  private final QueryCategoryService queryCategoryService;
 
   public AssistantService(
       ChatClient.Builder chatClientBuilder,
       ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       @Value("classpath:/prompts/user-prompt.st") Resource userPromptResource,
-      VectorStore vectorStore) {
+      VectorStore vectorStore, QueryCategoryService queryCategoryService) {
+    this.queryCategoryService = queryCategoryService;
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
@@ -45,18 +47,28 @@ public class AssistantService {
 
   public String askWithRag(
       String conversationId,
-      String question,
-      String category) {
+      String question) {
+
+    String category = queryCategoryService.classify(question);
 
     SearchRequest.Builder searchRequest = SearchRequest.builder()
         .query(question)
         .topK(2);
 
-    if (category != null && !category.isBlank()) {
+    if (category != null
+        && !category.isBlank()
+        && !category.equals("NONE")) {
+
       searchRequest.filterExpression(
           "category == '" + category + "'"
       );
     }
+
+    log.info("QUESTION: {}", question);
+    log.info("CLASSIFIED CATEGORY: {}", category);
+    assert category != null;
+    log.info("Using metadata filter: {}",
+        !category.equals("NONE"));
 
     List<Document> documents = vectorStore.similaritySearch(
         searchRequest.build()
