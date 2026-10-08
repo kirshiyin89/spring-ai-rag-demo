@@ -1,5 +1,6 @@
 package com.ai.assistant.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AssistantService {
 
@@ -52,6 +54,10 @@ public class AssistantService {
             .build()
     );
 
+    documents.forEach(document ->
+        log.info("RETRIEVED CHUNK:\n{}\n---", document.getText())
+    );
+
     String context = documents.stream()
         .map(Document::getText)
         .collect(Collectors.joining("\n\n---\n\n"));
@@ -61,6 +67,8 @@ public class AssistantService {
             "context", context,
             "question", question
         ));
+
+    log.info("FINAL USER PROMPT:\n{}", userPrompt);
 
     String systemPrompt = new PromptTemplate(systemPromptResource)
         .render();
