@@ -18,11 +18,13 @@ import org.springframework.stereotype.Service;
 public class VectorStoreService {
 
   private final VectorStore vectorStore;
-  private final MarkdownChunker markdownChunker;
+  private final TokenTextSplitter textSplitter;
 
   public VectorStoreService(VectorStore vectorStore) {
     this.vectorStore = vectorStore;
-    this.markdownChunker = new MarkdownChunker();
+    this.textSplitter = TokenTextSplitter.builder()
+        .withChunkSize(200)
+        .build();
   }
 
   public void loadDocuments() throws IOException {
@@ -37,14 +39,12 @@ public class VectorStoreService {
           StandardCharsets.UTF_8
       );
 
-      List<String> sections = markdownChunker.split(content);
+      Document document = new Document(
+          content,
+          Map.of("filename", Objects.requireNonNull(resource.getFilename()))
+      );
 
-      List<Document> chunks = sections.stream()
-          .map(section -> new Document(
-              section,
-              Map.of("filename", Objects.requireNonNull(resource.getFilename()))
-          ))
-          .toList();
+      List<Document> chunks = textSplitter.apply(List.of(document));
 
       vectorStore.add(chunks);
 

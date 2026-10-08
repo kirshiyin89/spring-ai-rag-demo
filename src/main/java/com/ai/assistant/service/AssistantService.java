@@ -68,8 +68,6 @@ public class AssistantService {
             "question", question
         ));
 
-    log.info("FINAL USER PROMPT:\n{}", userPrompt);
-
     String systemPrompt = new PromptTemplate(systemPromptResource)
         .render();
 
