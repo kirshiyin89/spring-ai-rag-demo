@@ -51,6 +51,12 @@ public class AssistantService {
 
     String category = queryCategoryService.classify(question);
 
+    if ("CLARIFY".equalsIgnoreCase(category)) {
+      return "What do you need help with? For example, "
+          + "GitLab access, company VPN access, "
+          + "or something else?";
+    }
+
     SearchRequest.Builder searchRequest = SearchRequest.builder()
         .query(question)
         .topK(10)
@@ -74,6 +80,13 @@ public class AssistantService {
     List<Document> documents = vectorStore.similaritySearch(
         searchRequest.build()
     );
+
+    if (documents.isEmpty()) {
+      return "I couldn't find relevant information in the "
+          + "available FinFlow documentation. "
+          + "Please provide more details or contact "
+          + "the relevant team.";
+    }
 
     documents.forEach(document -> {
       log.info("Similarity score: {}", document.getScore());
