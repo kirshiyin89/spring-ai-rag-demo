@@ -53,9 +53,10 @@ public class AssistantService {
 
     SearchRequest.Builder searchRequest = SearchRequest.builder()
         .query(question)
-        .topK(2);
+        .topK(10)
+        .similarityThreshold(0.20);
 
-    if (category != null
+   if (category != null
         && !category.isBlank()
         && !category.equals("NONE")) {
 
@@ -74,9 +75,12 @@ public class AssistantService {
         searchRequest.build()
     );
 
-    documents.forEach(document ->
-        log.info("RETRIEVED CHUNK:\n{}\n---", document.getText())
-    );
+    documents.forEach(document -> {
+      log.info("Similarity score: {}", document.getScore());
+      log.info("Metadata: {}", document.getMetadata());
+      log.info("Text: {}", document.getText());
+      log.info("---");
+    });
 
     String context = documents.stream()
         .map(Document::getText)
