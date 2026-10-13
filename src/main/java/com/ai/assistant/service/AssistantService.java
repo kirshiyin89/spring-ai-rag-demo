@@ -60,7 +60,7 @@ public class AssistantService {
     SearchRequest.Builder searchRequest = SearchRequest.builder()
         .query(question)
         .topK(10)
-        .similarityThreshold(0.20);
+        .similarityThreshold(0.35);
 
    if (category != null
         && !category.isBlank()
