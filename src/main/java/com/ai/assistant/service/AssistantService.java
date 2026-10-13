@@ -25,14 +25,17 @@ public class AssistantService {
   private final Resource userPromptResource;
   private final VectorStore vectorStore;
   private final QueryCategoryService queryCategoryService;
+  private final DocumentRetrievalService documentRetrievalService;
 
   public AssistantService(
       ChatClient.Builder chatClientBuilder,
       ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       @Value("classpath:/prompts/user-prompt.st") Resource userPromptResource,
-      VectorStore vectorStore, QueryCategoryService queryCategoryService) {
+      VectorStore vectorStore, QueryCategoryService queryCategoryService,
+      DocumentRetrievalService documentRetrievalService) {
     this.queryCategoryService = queryCategoryService;
+    this.documentRetrievalService = documentRetrievalService;
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
@@ -57,29 +60,7 @@ public class AssistantService {
           + "or something else?";
     }
 
-    SearchRequest.Builder searchRequest = SearchRequest.builder()
-        .query(question)
-        .topK(10)
-        .similarityThreshold(0.35);
-
-   if (category != null
-        && !category.isBlank()
-        && !category.equals("NONE")) {
-
-      searchRequest.filterExpression(
-          "category == '" + category + "'"
-      );
-    }
-
-    log.info("QUESTION: {}", question);
-    log.info("CLASSIFIED CATEGORY: {}", category);
-    assert category != null;
-    log.info("Using metadata filter: {}",
-        !category.equals("NONE"));
-
-    List<Document> documents = vectorStore.similaritySearch(
-        searchRequest.build()
-    );
+    List<Document> documents = documentRetrievalService.retrieve(question, category);
 
     if (documents.isEmpty()) {
       return "I couldn't find relevant information in the "
