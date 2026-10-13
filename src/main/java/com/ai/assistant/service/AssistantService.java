@@ -6,8 +6,6 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
@@ -23,7 +21,6 @@ public class AssistantService {
   private final ChatClient chatClient;
   private final Resource systemPromptResource;
   private final Resource userPromptResource;
-  private final VectorStore vectorStore;
   private final QueryCategoryService queryCategoryService;
   private final DocumentRetrievalService documentRetrievalService;
 
@@ -32,7 +29,7 @@ public class AssistantService {
       ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       @Value("classpath:/prompts/user-prompt.st") Resource userPromptResource,
-      VectorStore vectorStore, QueryCategoryService queryCategoryService,
+      QueryCategoryService queryCategoryService,
       DocumentRetrievalService documentRetrievalService) {
     this.queryCategoryService = queryCategoryService;
     this.documentRetrievalService = documentRetrievalService;
@@ -45,7 +42,6 @@ public class AssistantService {
 
     this.systemPromptResource = systemPromptResource;
     this.userPromptResource = userPromptResource;
-    this.vectorStore = vectorStore;
   }
 
   public String askWithRag(
