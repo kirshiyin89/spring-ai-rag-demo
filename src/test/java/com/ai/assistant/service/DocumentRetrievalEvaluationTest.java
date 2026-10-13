@@ -14,6 +14,10 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
 
 /**
  * IT Test. It tests the actual embedding and pgvector search path instead of mocking the vector store.
@@ -37,6 +41,23 @@ class DocumentRetrievalEvaluationTest {
       "b1c2c3d4-e5f6-4789-8123-123456789abc";
   private static final String SOFTWARE_ID =
       "c1c2c3d4-e5f6-4789-8123-123456789abc";
+
+  static final PostgreSQLContainer postgres =
+      new PostgreSQLContainer("pgvector/pgvector:pg16")
+          .withDatabaseName("rag_test")
+          .withUsername("test")
+          .withPassword("test");
+
+  static {
+    postgres.start();
+  }
+
+  @DynamicPropertySource
+  static void configureDatabase(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url", postgres::getJdbcUrl);
+    registry.add("spring.datasource.username", postgres::getUsername);
+    registry.add("spring.datasource.password", postgres::getPassword);
+  }
 
   @BeforeEach
   void setUp() {
