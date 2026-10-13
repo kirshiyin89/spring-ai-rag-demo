@@ -5,11 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Map;
 
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,19 +23,20 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 
 /**
- * IT Test. It tests the actual embedding and pgvector search path instead of mocking the vector store.
+ * IT Test. It tests the actual embedding and pgvector search path instead of mocking the vector
+ * store. Don't forget to add the LLM API KEY to the env vars of this test!
  */
 @SpringBootTest
 class DocumentRetrievalEvaluationTest {
-
-  private static final String TEST_DOCUMENT_ID =
-      "a1b2c3d4-e5f6-4789-8123-123456789abc";
 
   @Autowired
   private VectorStore vectorStore;
 
   @Autowired
   private DocumentRetrievalService retrievalService;
+
+  @Autowired
+  private QueryCategoryService queryCategoryService;
 
 
   private static final String GITLAB_ID =
@@ -41,6 +45,89 @@ class DocumentRetrievalEvaluationTest {
       "b1c2c3d4-e5f6-4789-8123-123456789abc";
   private static final String SOFTWARE_ID =
       "c1c2c3d4-e5f6-4789-8123-123456789abc";
+  private static final String COMPANY_ID =
+      "d1c2c3d4-e5f6-4789-8123-123456789abc";
+
+  private static final String ONBOARDING_ID =
+      "e1c2c3d4-e5f6-4789-8123-123456789abc";
+
+  private static final String HARDWARE_ID =
+      "f1c2c3d4-e5f6-4789-8123-123456789abc";
+  private static final String DEPLOYMENT_ID =
+      "11111111-1111-4111-8111-111111111111";
+
+  private static final String LICENSE_APPROVAL_ID =
+      "22222222-2222-4222-8222-222222222222";
+
+  record RetrievalCase(
+      String question,
+      String expectedCategory,
+      String expectedFilename
+  ) {
+
+  }
+
+  static final List<RetrievalCase> RETRIEVAL_CASES = List.of(
+      // Direct questions
+      new RetrievalCase(
+          "Who should I contact to request GitLab access?",
+          "access",
+          "gitlab-access.md"
+      ),
+      new RetrievalCase(
+          "How can I connect to the company VPN?",
+          "network",
+          "vpn-and-wlan-access.md"
+      ),
+      new RetrievalCase(
+          "Can I install any software I want?",
+          "software",
+          "software-license-request.md"
+      ),
+      new RetrievalCase(
+          "What does FinFlow Technologies do?",
+          "company",
+          "company-overview.md"
+      ),
+      new RetrievalCase(
+          "How do I request a company laptop?",
+          "hardware",
+          "laptop-request.md"
+      ),
+      new RetrievalCase(
+          "Who approves a paid software license request?",
+          "software",
+          "license-approval.md"
+      ),
+
+      // Paraphrased questions
+      new RetrievalCase(
+          "I need access to our Git repositories. How do I get it?",
+          "access",
+          "gitlab-access.md"
+      ),
+      new RetrievalCase(
+          "I work from home. How do I connect to the company network?",
+          "network",
+          "vpn-and-wlan-access.md"
+      ),
+      new RetrievalCase(
+          "My laptop is too old. How can I get a replacement?",
+          "hardware",
+          "laptop-request.md"
+      ),
+      new RetrievalCase(
+          "I just joined the company. What should I do first?",
+          "onboarding",
+          "new-employee-onboarding.md"
+      ),
+      new RetrievalCase(
+          "What information must I include when submitting a software license request?",
+          "software",
+          "software-license-request.md"
+      )
+  );
+
 
   static final PostgreSQLContainer postgres =
       new PostgreSQLContainer("pgvector/pgvector:pg16")
@@ -91,6 +178,47 @@ class DocumentRetrievalEvaluationTest {
             .build(),
 
         Document.builder()
+            .id(COMPANY_ID)
+            .text("""
+                FinFlow Technologies is a fintech company.
+                The company develops financial technology products
+                and services for its customers.
+                """)
+            .metadata(Map.of(
+                "filename", "company-overview.md",
+                "category", "company",
+                "department", "IT"))
+            .build(),
+
+        Document.builder()
+            .id(ONBOARDING_ID)
+            .text("""
+                New employee onboarding:
+                New employees should complete the onboarding process
+                and follow the company onboarding guide.
+                Contact the relevant team for help with initial setup.
+                """)
+            .metadata(Map.of(
+                "filename", "new-employee-onboarding.md",
+                "category", "onboarding",
+                "department", "IT"))
+            .build(),
+
+        Document.builder()
+            .id(HARDWARE_ID)
+            .text("""
+                Laptop requests:
+                Employees who need a new laptop or a replacement
+                should submit a hardware request to the IT team.
+                The IT team reviews hardware requests.
+                """)
+            .metadata(Map.of(
+                "filename", "laptop-request.md",
+                "category", "hardware",
+                "department", "IT"))
+            .build(),
+
+        Document.builder()
             .id(SOFTWARE_ID)
             .text("""
                 Software and license requests:
@@ -104,6 +232,40 @@ class DocumentRetrievalEvaluationTest {
                 "filename", "software-license-request.md",
                 "category", "software",
                 "department", "IT"))
+            .build(),
+
+        Document.builder()
+            .id(DEPLOYMENT_ID)
+            .text("""
+                Production deployment permissions:
+                Employees who need permission to deploy applications
+                to production must request deployment access.
+                The platform team reviews deployment permissions.
+                """)
+            .metadata(Map.of(
+                "filename", "production-deployment-access.md",
+                "category", "access",
+                "department", "Platform"))
+            .build(),
+
+        Document.builder()
+            .id(LICENSE_APPROVAL_ID)
+            .text("""
+                Software license approval:
+                
+                Employees who request paid software licenses need
+                manager approval for the business need. The IT team
+                reviews requests before purchase. Procurement handles
+                purchasing when required.
+                
+                Approval does not automatically grant access to the
+                software. IT may need to assign the license or install
+                the software after approval.
+                """)
+            .metadata(Map.of(
+                "filename", "license-approval.md",
+                "category", "software",
+                "department", "IT"))
             .build()
     ));
   }
@@ -113,7 +275,12 @@ class DocumentRetrievalEvaluationTest {
     vectorStore.delete(List.of(
         GITLAB_ID,
         VPN_ID,
-        SOFTWARE_ID
+        SOFTWARE_ID,
+        COMPANY_ID,
+        ONBOARDING_ID,
+        HARDWARE_ID,
+        LICENSE_APPROVAL_ID,
+        DEPLOYMENT_ID
     ));
   }
 
@@ -131,28 +298,25 @@ class DocumentRetrievalEvaluationTest {
   }
 
   @ParameterizedTest
-  @CsvSource({
-      "'Who should I contact to request GitLab access?', access, gitlab-access.md",
-      "'How can I connect to the company VPN?', network, vpn-and-wlan-access.md",
-      "'Can I install any software I want?', software, software-license-request.md"
-  })
-  void shouldRetrieveExpectedDocument(
-      String question,
-      String category,
-      String expectedFilename) {
-
-    List<Document> results =
-        retrievalService.retrieve(question, category);
+  @MethodSource("retrievalCases")
+  void shouldRetrieveExpectedDocument(RetrievalCase testCase) {
+    List<Document> results = retrievalService.retrieve(
+        testCase.question(),
+        testCase.expectedCategory()
+    );
 
     assertThat(results)
-        .extracting(document ->
-            document.getMetadata().get("filename"))
-        .as("Expected document for question: " + question)
-        .contains(expectedFilename);
+        .extracting(document -> document.getMetadata().get("filename"))
+        .as("Expected document for question: " + testCase.question())
+        .contains(testCase.expectedFilename());
+  }
+
+  static Stream<RetrievalCase> retrievalCases() {
+    return RETRIEVAL_CASES.stream();
   }
 
   @Test
-  void shouldNotRetrieveDocumentsForUnsupportedQuestion() {
+  void shouldReturnNoResultsWhenCategoryHasNoMatchingDocuments() {
     List<Document> results = retrievalService.retrieve(
         "What is the annual training budget for each employee?",
         "hr"
@@ -160,5 +324,110 @@ class DocumentRetrievalEvaluationTest {
 
     assertThat(results).isEmpty();
   }
+
+  @ParameterizedTest
+  @CsvSource({
+      "'How do I get access?', CLARIFY",
+      "'What is the capital of France?', NONE",
+      "'What is the company vacation policy?', hr",
+      "'How do I connect to the company VPN?', network",
+      "'How do I request GitLab access?', access"
+  })
+  void shouldClassifyQuestionsCorrectly(
+      String question,
+      String expectedCategory) {
+
+    assertThat(queryCategoryService.classify(question))
+        .as("Category for question: " + question)
+        .isEqualToIgnoringCase(expectedCategory);
+  }
+
+  @Test
+  void shouldFindSoftwareLicenseRequestDetails() {
+    List<Document> results = retrievalService.retrieve(
+        "What information must I include when requesting paid software?",
+        "software"
+    );
+
+    results.forEach(document -> {
+      System.out.println("Filename: "
+          + document.getMetadata().get("filename"));
+      System.out.println("Score: " + document.getScore());
+      System.out.println("Text: " + document.getText());
+      System.out.println("---");
+    });
+  }
+
+
+  @Test
+  @DisplayName("Report retrieval results for evaluation dataset")
+  void shouldReportRetrievalBaseline() {
+    int hits = 0;
+    int hitsAt1 = 0;
+    int total = RETRIEVAL_CASES.size();
+
+    System.out.println("\n========== RETRIEVAL BASELINE ==========");
+
+    for (RetrievalCase testCase : RETRIEVAL_CASES) {
+      List<Document> results = retrievalService.retrieve(
+          testCase.question(),
+          testCase.expectedCategory()
+      );
+
+      boolean hit = results.stream()
+          .anyMatch(document ->
+              testCase.expectedFilename().equals(
+                  document.getMetadata().get("filename")
+              )
+          );
+
+      if (hit) {
+        hits++;
+      }
+
+      if (!results.isEmpty()
+          && testCase.expectedFilename().equals(
+          results.getFirst().getMetadata().get("filename"))) {
+        hitsAt1++;
+      }
+
+      System.out.printf(
+          "%nQuestion: %s%nExpected: %s%nHit: %s%n",
+          testCase.question(),
+          testCase.expectedFilename(),
+          hit
+      );
+
+      for (int i = 0; i < results.size(); i++) {
+        Document document = results.get(i);
+
+        System.out.printf(
+            "  Rank %d | Score: %.4f | Filename: %s%nText: %s%n",
+            i + 1,
+            document.getScore(),
+            document.getMetadata().get("filename"),
+            document.getText()
+        );
+      }
+    }
+
+    double hitRate = 100.0 * hits / total;
+
+    System.out.printf(
+        "%nHit Rate@10: %d/%d (%.1f%%)%n",
+        hits,
+        total,
+        hitRate
+    );
+
+    System.out.printf(
+        "Hit Rate@1: %d/%d (%.1f%%)%n",
+        hitsAt1,
+        total,
+        100.0 * hitsAt1 / total
+    );
+
+  }
+
 
 }
