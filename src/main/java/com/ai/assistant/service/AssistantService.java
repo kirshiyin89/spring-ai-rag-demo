@@ -1,5 +1,6 @@
 package com.ai.assistant.service;
 
+import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 public class AssistantService {
 
   private final ChatClient chatClient;
+  private final ChatClient rewriteClient;
   private final Resource systemPromptResource;
   private final Resource userPromptResource;
   private final QueryCategoryService queryCategoryService;
@@ -33,6 +35,8 @@ public class AssistantService {
       DocumentRetrievalService documentRetrievalService) {
     this.queryCategoryService = queryCategoryService;
     this.documentRetrievalService = documentRetrievalService;
+
+    this.rewriteClient = chatClientBuilder.clone().build();
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
@@ -51,9 +55,7 @@ public class AssistantService {
     String category = queryCategoryService.classify(question);
 
     if ("CLARIFY".equalsIgnoreCase(category)) {
-      return "What do you need help with? For example, "
-          + "GitLab access, company VPN access, "
-          + "or something else?";
+      return generateClarification(question);
     }
 
     List<Document> documents = documentRetrievalService.retrieve(question, category);
@@ -94,5 +96,32 @@ public class AssistantService {
         ))
         .call()
         .content();
+  }
+
+  private String generateClarification(String question) {
+    return Objects.requireNonNull(rewriteClient.prompt()
+            .system("""
+                You are a friendly assistant for FinFlow Technologies,
+                helping employees with internal company documentation.
+                
+                The employee's request is ambiguous or lacks enough
+                detail to identify what they need.
+                
+                Ask one short, natural follow-up question that helps
+                identify their intent.
+                
+                Use the employee's original wording and context.
+                Offer relevant examples from these topics when useful:
+                onboarding, GitLab access, VPN and WLAN, hardware
+                requests, software licenses, and company information.
+                
+                Do not answer the original question.
+                Do not invent company policies or procedures.
+                Do not ask multiple questions at once.
+                """)
+            .user(question)
+            .call()
+            .content())
+        .trim();
   }
 }
