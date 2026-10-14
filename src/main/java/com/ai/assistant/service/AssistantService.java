@@ -8,6 +8,8 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.rag.Query;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
 import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,25 +25,30 @@ public class AssistantService {
 
   private final ChatClient chatClient;
   private final ChatClient rewriteClient;
+  private final ChatMemory chatMemory;
   private final Resource systemPromptResource;
   private final Resource userPromptResource;
   private final QueryCategoryService queryCategoryService;
   private final DocumentRetrievalService documentRetrievalService;
   private final RewriteQueryTransformer rewriteQueryTransformer;
+  private final CompressionQueryTransformer compressionQueryTransformer;
+
 
   public AssistantService(
-      ChatClient.Builder chatClientBuilder,
-      ChatMemory chatMemory,
+      ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       @Value("classpath:/prompts/user-prompt.st") Resource userPromptResource,
       QueryCategoryService queryCategoryService,
       DocumentRetrievalService documentRetrievalService,
-      RewriteQueryTransformer rewriteQueryTransformer) {
+      RewriteQueryTransformer rewriteQueryTransformer,
+      CompressionQueryTransformer compressionQueryTransformer) {
+    this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
     this.documentRetrievalService = documentRetrievalService;
 
     this.rewriteClient = chatClientBuilder.clone().build();
     this.rewriteQueryTransformer = rewriteQueryTransformer;
+    this.compressionQueryTransformer = compressionQueryTransformer;
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
@@ -57,17 +64,33 @@ public class AssistantService {
       String conversationId,
       String question) {
 
-    String category = queryCategoryService.classify(question);
+    List<Message> history = chatMemory.get(conversationId);
+
+    String standaloneQuestion = question;
+
+    if (!history.isEmpty()) {
+      Query queryWithHistory = Query.builder()
+          .text(question)
+          .history(history)
+          .build();
+
+      standaloneQuestion = compressionQueryTransformer
+          .transform(queryWithHistory)
+          .text();
+    }
+
+    String category = queryCategoryService.classify(standaloneQuestion);
 
     if ("CLARIFY".equalsIgnoreCase(category)) {
       return generateClarification(question);
     }
 
     String rewrittenQuestion = rewriteQueryTransformer
-        .transform(new Query(question))
+        .transform(new Query(standaloneQuestion))
         .text();
 
     log.info("Original question: {}", question);
+    log.info("Standalone question: {}", standaloneQuestion);
     log.info("Rewritten query: {}", rewrittenQuestion);
 
     List<Document> documents =
