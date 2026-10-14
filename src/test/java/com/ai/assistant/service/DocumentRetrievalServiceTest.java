@@ -9,22 +9,21 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.rag.Query;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
 
 import static org.mockito.Mockito.mock;
 
 class DocumentRetrievalServiceTest {
 
-  private VectorStore vectorStore;
+  private VectorStoreDocumentRetriever vectorStoreDocumentRetriever;
   private DocumentRetrievalService retrievalService;
 
   @BeforeEach
   void setUp() {
-    vectorStore = mock(VectorStore.class);
-    retrievalService = new DocumentRetrievalService(vectorStore);
+    vectorStoreDocumentRetriever = mock(VectorStoreDocumentRetriever.class);
+    retrievalService = new DocumentRetrievalService(vectorStoreDocumentRetriever);
   }
 
   @Test
@@ -37,7 +36,7 @@ class DocumentRetrievalServiceTest {
         ))
         .build();
 
-    when(vectorStore.similaritySearch(any(SearchRequest.class)))
+    when(vectorStoreDocumentRetriever.retrieve(any(Query.class)))
         .thenReturn(List.of(document));
 
     List<Document> results = retrievalService.retrieve(
@@ -49,32 +48,12 @@ class DocumentRetrievalServiceTest {
     assertThat(results.getFirst().getMetadata())
         .containsEntry("filename", "gitlab-access.md");
 
-    verify(vectorStore).similaritySearch(any(SearchRequest.class));
-  }
-
-  @Test
-  void shouldApplySimilarityThresholdAndCategoryFilter() {
-    when(vectorStore.similaritySearch(any(SearchRequest.class)))
-        .thenReturn(List.of());
-
-    retrievalService.retrieve(
-        "Can I deploy directly to production?",
-        "access"
-    );
-
-    ArgumentCaptor<SearchRequest> captor =
-        ArgumentCaptor.forClass(SearchRequest.class);
-
-    verify(vectorStore).similaritySearch(captor.capture());
-
-    SearchRequest request = captor.getValue();
-
-    assertThat(request.getSimilarityThreshold()).isEqualTo(0.35);
+    verify(vectorStoreDocumentRetriever).retrieve(any(Query.class));
   }
 
   @Test
   void shouldReturnEmptyListWhenNoDocumentsMatch() {
-    when(vectorStore.similaritySearch(any(SearchRequest.class)))
+    when(vectorStoreDocumentRetriever.retrieve(any(Query.class)))
         .thenReturn(List.of());
 
     List<Document> results = retrievalService.retrieve(

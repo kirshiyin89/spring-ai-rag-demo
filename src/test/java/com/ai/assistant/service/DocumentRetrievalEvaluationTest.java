@@ -53,8 +53,6 @@ class DocumentRetrievalEvaluationTest {
 
   private static final String HARDWARE_ID =
       "f1c2c3d4-e5f6-4789-8123-123456789abc";
-  private static final String DEPLOYMENT_ID =
-      "11111111-1111-4111-8111-111111111111";
 
   private static final String LICENSE_APPROVAL_ID =
       "22222222-2222-4222-8222-222222222222";
@@ -371,73 +369,8 @@ class DocumentRetrievalEvaluationTest {
     results.forEach(document -> {
       System.out.println("Filename: "
           + document.getMetadata().get("filename"));
-      System.out.println("Score: " + document.getScore());
       System.out.println("Text: " + document.getText());
       System.out.println("---");
     });
   }
-
-
-  @Test
-  @DisplayName("Compare retrieval results across similarity thresholds")
-  void shouldCompareSimilarityThresholds() {
-    List<Double> thresholds = List.of(0.10, 0.25, 0.30, 0.35);
-
-    for (double threshold : thresholds) {
-      int hits = 0;
-      int hitsAt1 = 0;
-      int total = RETRIEVAL_CASES.size();
-
-      System.out.printf(
-          "%n========== THRESHOLD: %.2f ==========%n",
-          threshold
-      );
-
-      for (RetrievalCase testCase : RETRIEVAL_CASES) {
-        List<Document> results = retrievalService.retrieve(
-            testCase.question(),
-            testCase.expectedCategory(),
-            threshold
-        );
-
-        boolean hit = results.stream().anyMatch(document ->
-            testCase.expectedFilename().equals(
-                document.getMetadata().get("filename")
-            )
-        );
-
-        if (hit) {
-          hits++;
-        }
-
-        if (!results.isEmpty()
-            && testCase.expectedFilename().equals(
-            results.getFirst().getMetadata().get("filename"))) {
-          hitsAt1++;
-        }
-
-        System.out.printf(
-            "Question: %s | Expected: %s | Hit: %s | Top result: %s%n",
-            testCase.question(),
-            testCase.expectedFilename(),
-            hit,
-            results.isEmpty()
-                ? "<none>"
-                : results.getFirst().getMetadata().get("filename")
-        );
-      }
-
-      System.out.printf(
-          "Hit Rate@10: %d/%d (%.1f%%)%n",
-          hits, total, 100.0 * hits / total
-      );
-
-      System.out.printf(
-          "Hit Rate@1: %d/%d (%.1f%%)%n",
-          hitsAt1, total, 100.0 * hitsAt1 / total
-      );
-    }
-  }
-
-
 }
