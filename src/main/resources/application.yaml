@@ -23,3 +23,7 @@ spring:
       type: pgvector
       pgvector:
         initialize-schema: true
+
+app:
+  rag:
+    similarity-threshold: 0.35

@@ -125,6 +125,27 @@ class DocumentRetrievalEvaluationTest {
           "What information must I include when submitting a software license request?",
           "software",
           "software-license-request.md"
+      ),
+      // Difficult production-deployment questions
+      new RetrievalCase(
+          "Can I deploy directly to production?",
+          "access",
+          "gitlab-access.md"
+      ),
+      new RetrievalCase(
+          "Can I push my changes straight to prod?",
+          "access",
+          "gitlab-access.md"
+      ),
+      new RetrievalCase(
+          "how i get prod deploy access?",
+          "access",
+          "gitlab-access.md"
+      ),
+      new RetrievalCase(
+          "can i deply directly to producion?",
+          "access",
+          "gitlab-access.md"
       )
   );
 
@@ -153,9 +174,22 @@ class DocumentRetrievalEvaluationTest {
             .id(GITLAB_ID)
             .text("""
                 GitLab access:
+                
                 Employees must request GitLab access through
                 the IT team. The team reviews requests and
                 grants permissions according to the employee's role.
+                
+                GitLab CI/CD can deploy applications to company
+                environments. Production deployment permissions
+                are restricted.
+                
+                Developers may have permission to trigger normal
+                deployment pipelines without having direct production
+                administration access.
+                
+                Most software developers receive the Developer role
+                for their team's projects. Maintainer access requires
+                additional justification.
                 """)
             .metadata(Map.of(
                 "filename", "gitlab-access.md",
@@ -235,20 +269,6 @@ class DocumentRetrievalEvaluationTest {
             .build(),
 
         Document.builder()
-            .id(DEPLOYMENT_ID)
-            .text("""
-                Production deployment permissions:
-                Employees who need permission to deploy applications
-                to production must request deployment access.
-                The platform team reviews deployment permissions.
-                """)
-            .metadata(Map.of(
-                "filename", "production-deployment-access.md",
-                "category", "access",
-                "department", "Platform"))
-            .build(),
-
-        Document.builder()
             .id(LICENSE_APPROVAL_ID)
             .text("""
                 Software license approval:
@@ -279,8 +299,7 @@ class DocumentRetrievalEvaluationTest {
         COMPANY_ID,
         ONBOARDING_ID,
         HARDWARE_ID,
-        LICENSE_APPROVAL_ID,
-        DEPLOYMENT_ID
+        LICENSE_APPROVAL_ID
     ));
   }
 
@@ -360,73 +379,64 @@ class DocumentRetrievalEvaluationTest {
 
 
   @Test
-  @DisplayName("Report retrieval results for evaluation dataset")
-  void shouldReportRetrievalBaseline() {
-    int hits = 0;
-    int hitsAt1 = 0;
-    int total = RETRIEVAL_CASES.size();
+  @DisplayName("Compare retrieval results across similarity thresholds")
+  void shouldCompareSimilarityThresholds() {
+    List<Double> thresholds = List.of(0.10, 0.25, 0.30, 0.35);
 
-    System.out.println("\n========== RETRIEVAL BASELINE ==========");
+    for (double threshold : thresholds) {
+      int hits = 0;
+      int hitsAt1 = 0;
+      int total = RETRIEVAL_CASES.size();
 
-    for (RetrievalCase testCase : RETRIEVAL_CASES) {
-      List<Document> results = retrievalService.retrieve(
-          testCase.question(),
-          testCase.expectedCategory()
+      System.out.printf(
+          "%n========== THRESHOLD: %.2f ==========%n",
+          threshold
       );
 
-      boolean hit = results.stream()
-          .anyMatch(document ->
-              testCase.expectedFilename().equals(
-                  document.getMetadata().get("filename")
-              )
-          );
+      for (RetrievalCase testCase : RETRIEVAL_CASES) {
+        List<Document> results = retrievalService.retrieve(
+            testCase.question(),
+            testCase.expectedCategory(),
+            threshold
+        );
 
-      if (hit) {
-        hits++;
-      }
+        boolean hit = results.stream().anyMatch(document ->
+            testCase.expectedFilename().equals(
+                document.getMetadata().get("filename")
+            )
+        );
 
-      if (!results.isEmpty()
-          && testCase.expectedFilename().equals(
-          results.getFirst().getMetadata().get("filename"))) {
-        hitsAt1++;
+        if (hit) {
+          hits++;
+        }
+
+        if (!results.isEmpty()
+            && testCase.expectedFilename().equals(
+            results.getFirst().getMetadata().get("filename"))) {
+          hitsAt1++;
+        }
+
+        System.out.printf(
+            "Question: %s | Expected: %s | Hit: %s | Top result: %s%n",
+            testCase.question(),
+            testCase.expectedFilename(),
+            hit,
+            results.isEmpty()
+                ? "<none>"
+                : results.getFirst().getMetadata().get("filename")
+        );
       }
 
       System.out.printf(
-          "%nQuestion: %s%nExpected: %s%nHit: %s%n",
-          testCase.question(),
-          testCase.expectedFilename(),
-          hit
+          "Hit Rate@10: %d/%d (%.1f%%)%n",
+          hits, total, 100.0 * hits / total
       );
 
-      for (int i = 0; i < results.size(); i++) {
-        Document document = results.get(i);
-
-        System.out.printf(
-            "  Rank %d | Score: %.4f | Filename: %s%nText: %s%n",
-            i + 1,
-            document.getScore(),
-            document.getMetadata().get("filename"),
-            document.getText()
-        );
-      }
+      System.out.printf(
+          "Hit Rate@1: %d/%d (%.1f%%)%n",
+          hitsAt1, total, 100.0 * hitsAt1 / total
+      );
     }
-
-    double hitRate = 100.0 * hits / total;
-
-    System.out.printf(
-        "%nHit Rate@10: %d/%d (%.1f%%)%n",
-        hits,
-        total,
-        hitRate
-    );
-
-    System.out.printf(
-        "Hit Rate@1: %d/%d (%.1f%%)%n",
-        hitsAt1,
-        total,
-        100.0 * hitsAt1 / total
-    );
-
   }
 
 
