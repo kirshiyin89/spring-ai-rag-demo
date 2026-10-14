@@ -7,6 +7,8 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.rag.Query;
+import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
@@ -25,6 +27,7 @@ public class AssistantService {
   private final Resource userPromptResource;
   private final QueryCategoryService queryCategoryService;
   private final DocumentRetrievalService documentRetrievalService;
+  private final RewriteQueryTransformer rewriteQueryTransformer;
 
   public AssistantService(
       ChatClient.Builder chatClientBuilder,
@@ -32,11 +35,13 @@ public class AssistantService {
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       @Value("classpath:/prompts/user-prompt.st") Resource userPromptResource,
       QueryCategoryService queryCategoryService,
-      DocumentRetrievalService documentRetrievalService) {
+      DocumentRetrievalService documentRetrievalService,
+      RewriteQueryTransformer rewriteQueryTransformer) {
     this.queryCategoryService = queryCategoryService;
     this.documentRetrievalService = documentRetrievalService;
 
     this.rewriteClient = chatClientBuilder.clone().build();
+    this.rewriteQueryTransformer = rewriteQueryTransformer;
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
@@ -58,7 +63,15 @@ public class AssistantService {
       return generateClarification(question);
     }
 
-    List<Document> documents = documentRetrievalService.retrieve(question, category);
+    String rewrittenQuestion = rewriteQueryTransformer
+        .transform(new Query(question))
+        .text();
+
+    log.info("Original question: {}", question);
+    log.info("Rewritten query: {}", rewrittenQuestion);
+
+    List<Document> documents =
+        documentRetrievalService.retrieve(rewrittenQuestion, category);
 
     if (documents.isEmpty()) {
       return "I couldn't find relevant information in the "
