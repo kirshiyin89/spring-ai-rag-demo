@@ -1,3 +1,4 @@
+
 Company onboarding documentation:
 
 {context}
@@ -6,7 +7,7 @@ Company onboarding documentation:
 
 Employee question:
 
-{question}
+{query}
 
 Answer the employee's question using the company documentation above.
 
