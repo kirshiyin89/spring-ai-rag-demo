@@ -50,7 +50,7 @@ Do not share your GitLab credentials with another employee.
 
 GitLab CI/CD can deploy applications to company environments.
 
-Production deployment permissions are restricted.
+Production deployment permissions are restricted. You cannot deploy directly to production.
 
 Developers may have permission to trigger normal deployment pipelines without having direct production administration access.
 
