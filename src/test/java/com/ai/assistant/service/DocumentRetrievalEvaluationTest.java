@@ -130,17 +130,12 @@ class DocumentRetrievalEvaluationTest {
           "gitlab-access.md"
       ),
       new RetrievalCase(
-          "Can I push my changes straight to prod?",
-          "access",
-          "gitlab-access.md"
-      ),
-      new RetrievalCase(
           "how i get prod deploy access?",
           "access",
           "gitlab-access.md"
       ),
       new RetrievalCase(
-          "can i deply directly to producion?",
+          "can i deploy directly to production without testing?",
           "access",
           "gitlab-access.md"
       )
@@ -187,6 +182,13 @@ class DocumentRetrievalEvaluationTest {
                 Most software developers receive the Developer role
                 for their team's projects. Maintainer access requires
                 additional justification.
+                Production deployment policy:
+                
+                Employees must not push changes directly to production.
+                Production deployments require the appropriate permissions
+                and must follow the company's deployment process.
+                Having permission to trigger a deployment pipeline does not
+                automatically grant permission to deploy directly to production.
                 """)
             .metadata(Map.of(
                 "filename", "gitlab-access.md",

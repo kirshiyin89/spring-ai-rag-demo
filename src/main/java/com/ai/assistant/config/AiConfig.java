@@ -25,6 +25,9 @@ public class AiConfig {
   @Value("classpath:/prompts/user-prompt.st")
   private Resource userPromptResource;
 
+  @Value("${app.rag.similarity-threshold}")
+  private double similarityThreshold;
+
 
   @Bean
   RewriteQueryTransformer rewriteQueryTransformer(
@@ -59,7 +62,7 @@ public class AiConfig {
     return VectorStoreDocumentRetriever.builder()
         .vectorStore(vectorStore)
         .topK(10)
-        .similarityThreshold(0.35)
+        .similarityThreshold(similarityThreshold)
         .build();
   }
 
