@@ -5,6 +5,7 @@ import com.ai.assistant.service.VectorStoreService;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,7 +19,7 @@ public class ChatController {
     private final VectorStoreService vectorStoreService;
 
 
-    @GetMapping(path = "load-vectors")
+    @PostMapping(path = "load-vectors")
     public String loadVectors() throws IOException {
         vectorStoreService.loadDocuments();
         return "done";

@@ -37,13 +37,13 @@ If the database service is not named `postgres`, get its name from
 
 The current local Spring configuration in `application.yaml` uses:
 
-  Setting    Value
+Setting Value
   ---------- ---------------
-  Host       `localhost`
-  Port       `5432`
-  Database   `ragdb`
-  Username   `raguser`
-  Password   `ragpassword`
+Host       `localhost`
+Port       `5432`
+Database   `ragdb`
+Username   `raguser`
+Password   `ragpassword`
 
 These credentials are for local development only. Do not use them in a
 shared or production environment, and do not commit real secrets to Git.
@@ -157,28 +157,30 @@ If this returns `vector`, the extension exists in the current database.
 
 ## 8. Current RAG workflow
 
-1.  Start PostgreSQL: `docker compose up -d`.
+1. Start PostgreSQL: `docker compose up -d`.
 
-2.  Start the Spring Boot application.
+2. Start the Spring Boot application.
 
-3.  Load the Markdown documents through the current development
-    endpoint:
+3. Load the Markdown documents through the current development
+   endpoint:
 
-    ``` http
-    GET http://localhost:8080/api/chat/load-vectors
-    ```
+   ``` http
+   curl -i -u "raguser:your-database-password" \
 
-4.  Check the indexed chunk count:
+-X POST http://localhost:8080/api/chat/load-vectors
+```
 
-    ``` sql
-    SELECT COUNT(*) FROM vector_store;
-    ```
+4. Check the indexed chunk count:
 
-5.  Test the chatbot:
+   ``` sql
+   SELECT COUNT(*) FROM vector_store;
+   ```
 
-    ``` http
-    GET http://localhost:8080/api/chat/rag?conversationId=alice&question=What%20does%20FinFlow%20Technologies%20do%3F
-    ```
+5. Test the chatbot:
+
+   ``` http
+   GET http://localhost:8080/api/chat/rag?conversationId=alice&question=What%20does%20FinFlow%20Technologies%20do%3F
+   ```
 
 The ingestion endpoint currently adds chunks each time it runs. Until
 ingestion becomes idempotent, repeated calls can create duplicate
@@ -190,11 +192,11 @@ improvement is to switch it to a protected `POST` endpoint.
 
 ## 9. Reset reminders
 
--   `docker compose down`: stops and removes containers/networks created
-    by Compose; named volumes usually remain.
--   `docker compose down -v`: also removes Compose-managed volumes and
-    can permanently delete the local database data.
--   `TRUNCATE TABLE vector_store`: clears indexed chunks but keeps the
-    table.
--   `DROP TABLE vector_store`: removes the table itself. Avoid this
-    unless you deliberately want to recreate the schema.
+- `docker compose down`: stops and removes containers/networks created
+  by Compose; named volumes usually remain.
+- `docker compose down -v`: also removes Compose-managed volumes and
+  can permanently delete the local database data.
+- `TRUNCATE TABLE vector_store`: clears indexed chunks but keeps the
+  table.
+- `DROP TABLE vector_store`: removes the table itself. Avoid this
+  unless you deliberately want to recreate the schema.
