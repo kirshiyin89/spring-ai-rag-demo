@@ -1,5 +1,6 @@
 package com.ai.assistant.config;
 
+import com.ai.assistant.service.KeywordOverlapDocumentPostProcessor;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -105,11 +106,11 @@ public class AiConfig {
     };
   }
 
-
   @Bean
   RetrievalAugmentationAdvisor retrievalAugmentationAdvisor(
       @Qualifier("loggingQueryExpander") QueryExpander queryExpander,
-      VectorStoreDocumentRetriever retriever) {
+      VectorStoreDocumentRetriever retriever,
+      KeywordOverlapDocumentPostProcessor postProcessor) {
 
     PromptTemplate promptTemplate =
         new PromptTemplate(userPromptResource);
@@ -123,10 +124,9 @@ public class AiConfig {
     return RetrievalAugmentationAdvisor.builder()
         .queryExpander(queryExpander)
         .documentRetriever(retriever)
+        .documentPostProcessors(postProcessor)
         .queryAugmenter(queryAugmenter)
         .build();
   }
-
-
 
 }

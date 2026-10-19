@@ -1,10 +1,14 @@
 package com.ai.assistant.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doAnswer;
 
 import java.util.List;
 import java.util.Map;
 
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,11 +17,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.rag.Query;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 
@@ -36,6 +42,12 @@ class DocumentRetrievalEvaluationTest {
 
   @Autowired
   private QueryCategoryService queryCategoryService;
+
+  @Autowired
+  private AssistantService assistantService;
+
+  @MockitoSpyBean
+  private KeywordOverlapDocumentPostProcessor postProcessor;
 
 
   private static final String GITLAB_ID =
@@ -361,17 +373,122 @@ class DocumentRetrievalEvaluationTest {
   }
 
   @Test
-  void shouldFindSoftwareLicenseRequestDetails() {
-    List<Document> results = retrievalService.retrieve(
-        "What information must I include when requesting paid software?",
-        "software"
+  void shouldEvaluateSoftwareLicenseApprovalReranking() {
+    String question =
+        "Who approves a paid software license request?";
+
+    List<Document> retrieved =
+        retrievalService.retrieve(question, "software");
+
+    System.out.println("\n=== BEFORE RERANKING ===");
+    printRanking(retrieved);
+
+    List<Document> reranked = postProcessor.process(
+        org.springframework.ai.rag.Query.builder()
+            .text(question)
+            .build(),
+        retrieved
     );
 
-    results.forEach(document -> {
-      System.out.println("Filename: "
-          + document.getMetadata().get("filename"));
-      System.out.println("Text: " + document.getText());
-      System.out.println("---");
-    });
+    System.out.println("\n=== AFTER RERANKING ===");
+    printRanking(reranked);
+
+    assertThat(reranked)
+        .extracting(document ->
+            document.getMetadata().get("filename"))
+        .contains("license-approval.md");
   }
+
+  private void printRanking(List<Document> documents) {
+    for (int i = 0; i < documents.size(); i++) {
+      System.out.printf(
+          "%d. %s%n",
+          i + 1,
+          documents.get(i).getMetadata().get("filename")
+      );
+    }
+  }
+
+
+  @Test
+  void shouldPromoteDocumentWithMoreKeywordOverlap() {
+    String question = "Who approves a paid software license request?";
+
+    Document general = Document.builder()
+        .id("general")
+        .text("""
+          Software requests:
+          Employees should contact IT to request software.
+          The IT team reviews installation requests.
+          """)
+        .metadata(Map.of("filename", "software-license-request.md"))
+        .build();
+
+    Document specific = Document.builder()
+        .id("specific")
+        .text("""
+          Software license approval:
+          A manager approves the business need for paid software.
+          IT reviews the request before purchase.
+          """)
+        .metadata(Map.of("filename", "license-approval.md"))
+        .build();
+
+    List<Document> reranked = postProcessor.process(
+        org.springframework.ai.rag.Query.builder()
+            .text(question)
+            .build(),
+        List.of(general, specific)
+    );
+
+    assertThat(reranked)
+        .extracting(document ->
+            document.getMetadata().get("filename"))
+        .containsExactly(
+            "license-approval.md",
+            "software-license-request.md"
+        );
+  }
+
+
+  @Test
+  void shouldUseRerankingInProductionRagPipeline() {
+    String question =
+        "Who approves a paid software license request?";
+
+    AtomicReference<List<String>> rankedFilenames =
+        new AtomicReference<>(List.of());
+
+    doAnswer(invocation -> {
+      List<Document> reranked = (List<Document>) invocation.callRealMethod();
+
+      rankedFilenames.set(
+          reranked.stream()
+              .map(document -> String.valueOf(
+                  document.getMetadata().get("filename")))
+              .toList()
+      );
+
+      return reranked;
+    }).when(postProcessor)
+        .process(any(Query.class), anyList());
+
+    String answer = assistantService.askWithRag(
+        "reranking-evaluation",
+        question
+    );
+
+    assertThat(answer).isNotBlank();
+
+    assertThat(rankedFilenames.get())
+        .as("The production RAG pipeline should invoke the post-processor")
+        .isNotEmpty();
+
+    assertThat(rankedFilenames.get().getFirst())
+        .as("The approval document should rank first")
+        .isEqualTo("license-approval.md");
+  }
+
+
+
 }
