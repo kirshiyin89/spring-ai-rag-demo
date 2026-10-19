@@ -21,7 +21,7 @@ import java.util.List;
 public class AssistantService {
 
   private final ChatClient chatClient;
-  private final ChatClient rewriteClient;
+  private final ChatClient clarificationClient;
   private final ChatMemory chatMemory;
   private final Resource systemPromptResource;
   private final QueryCategoryService queryCategoryService;
@@ -38,7 +38,7 @@ public class AssistantService {
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
 
-    this.rewriteClient = chatClientBuilder.clone().build();
+    this.clarificationClient = chatClientBuilder.clone().build();
     this.compressionQueryTransformer = compressionQueryTransformer;
     this.retrievalAugmentationAdvisor = retrievalAugmentationAdvisor;
 
@@ -102,7 +102,7 @@ public class AssistantService {
 
 
   private String generateClarification(String question) {
-    return Objects.requireNonNull(rewriteClient.prompt()
+    return Objects.requireNonNull(clarificationClient.prompt()
             .system("""
                 You are a friendly assistant for FinFlow Technologies,
                 helping employees with internal company documentation.

@@ -1,13 +1,19 @@
 package com.ai.assistant.config;
 
+import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.rag.Query;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.generation.augmentation.ContextualQueryAugmenter;
+import org.springframework.ai.rag.preretrieval.query.expansion.MultiQueryExpander;
+import org.springframework.ai.rag.preretrieval.query.expansion.QueryExpander;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
 import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,6 +21,7 @@ import org.springframework.core.io.Resource;
 
 
 @Configuration
+@Slf4j
 public class AiConfig {
 
   @Bean
@@ -68,8 +75,40 @@ public class AiConfig {
 
 
   @Bean
+  MultiQueryExpander multiQueryExpander(
+      ChatClient.Builder builder) {
+
+    return MultiQueryExpander.builder()
+        .chatClientBuilder(builder.clone())
+        .numberOfQueries(3)
+        .includeOriginal(true)
+        .build();
+  }
+
+  @Bean
+  QueryExpander loggingQueryExpander(
+      MultiQueryExpander delegate) {
+
+    return query -> {
+      List<Query> expandedQueries = delegate.expand(query);
+
+      log.info("Query expansion input: {}", query.text());
+
+      for (int i = 0; i < expandedQueries.size(); i++) {
+        log.info(
+            "Query variant [{}]: {}",
+            i + 1,
+            expandedQueries.get(i).text());
+      }
+
+      return expandedQueries;
+    };
+  }
+
+
+  @Bean
   RetrievalAugmentationAdvisor retrievalAugmentationAdvisor(
-      RewriteQueryTransformer rewriteQueryTransformer,
+      @Qualifier("loggingQueryExpander") QueryExpander queryExpander,
       VectorStoreDocumentRetriever retriever) {
 
     PromptTemplate promptTemplate =
@@ -82,11 +121,12 @@ public class AiConfig {
             .build();
 
     return RetrievalAugmentationAdvisor.builder()
-        .queryTransformers(rewriteQueryTransformer)
+        .queryExpander(queryExpander)
         .documentRetriever(retriever)
         .queryAugmenter(queryAugmenter)
         .build();
   }
+
 
 
 }
