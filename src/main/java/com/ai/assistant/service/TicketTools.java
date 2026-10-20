@@ -1,12 +1,17 @@
 
 package com.ai.assistant.service;
 
+import java.util.Locale;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class TicketTools {
+
+  private final TicketService ticketService;
 
   @Tool(
       name = "getTicketStatus",
@@ -16,20 +21,19 @@ public class TicketTools {
       @ToolParam(description = "The IT ticket ID, for example IT-1042")
       String ticketId
   ) {
-    // Simulated ticket data for learning purposes
-    return switch (ticketId.toUpperCase()) {
-      case "IT-1042" ->
-          "Ticket IT-1042: Status = In Progress. "
-              + "Issue: VPN connection fails. "
-              + "Assigned team: IT Support.";
+    String normalizedTicketId =
+        ticketId.trim().toUpperCase(Locale.ROOT);
 
-      case "IT-1043" ->
-          "Ticket IT-1043: Status = Resolved. "
-              + "Issue: GitLab access request. "
-              + "Assigned team: IT Support.";
 
-      default ->
-          "No ticket found with ID " + ticketId + ".";
-    };
+    return ticketService.findTicket(normalizedTicketId)
+        .map(details ->
+            "TICKET_FOUND: Ticket " + normalizedTicketId
+                + ": " + details
+        )
+        .orElse(
+            "TICKET_NOT_FOUND: No ticket exists with the exact ID "
+                + normalizedTicketId
+                + ". Do not infer or substitute another ticket ID."
+        );
   }
 }
