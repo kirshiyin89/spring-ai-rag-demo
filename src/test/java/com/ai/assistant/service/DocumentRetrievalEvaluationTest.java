@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,9 @@ class DocumentRetrievalEvaluationTest {
 
   @MockitoSpyBean
   private KeywordOverlapDocumentPostProcessor postProcessor;
+
+  @MockitoSpyBean
+  private TicketService ticketService;
 
 
   private static final String GITLAB_ID =
@@ -487,6 +491,41 @@ class DocumentRetrievalEvaluationTest {
     assertThat(rankedFilenames.get().getFirst())
         .as("The approval document should rank first")
         .isEqualTo("license-approval.md");
+  }
+
+
+  @Test
+  void shouldCallTicketToolForTicketStatusQuestion() {
+    String conversationId = "ticket-tool-integration";
+
+    String answer = assistantService.askWithRag(
+        conversationId,
+        "What is the current status of ticket IT-1042?"
+    );
+
+    // Verify the model produced the expected answer.
+    assertThat(answer)
+        .containsIgnoringCase("IT-1042")
+        .containsIgnoringCase("In Progress");
+
+    // Verify that the actual ticket lookup was executed.
+    verify(ticketService).findTicket("IT-1042");
+  }
+
+  @Test
+  void shouldReportUnknownTicketWhenTicketDoesNotExist() {
+    String conversationId = "unknown-ticket-integration";
+
+    String answer = assistantService.askWithRag(
+        conversationId,
+        "What is the current status of ticket IT-9999?"
+    );
+
+    assertThat(answer)
+        .containsIgnoringCase("IT-9999")
+        .containsIgnoringCase("not found");
+
+    verify(ticketService).findTicket("IT-9999");
   }
 
 
