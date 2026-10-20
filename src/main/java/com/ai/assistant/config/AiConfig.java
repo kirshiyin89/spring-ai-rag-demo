@@ -117,7 +117,7 @@ public class AiConfig {
 
     ContextualQueryAugmenter queryAugmenter =
         ContextualQueryAugmenter.builder()
-            .allowEmptyContext(false)
+            .allowEmptyContext(true)
             .promptTemplate(promptTemplate)
             .build();
 

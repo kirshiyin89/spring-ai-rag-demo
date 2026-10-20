@@ -27,6 +27,7 @@ public class AssistantService {
   private final QueryCategoryService queryCategoryService;
   private final CompressionQueryTransformer compressionQueryTransformer;
   private final RetrievalAugmentationAdvisor retrievalAugmentationAdvisor;
+  private final TicketTools ticketTools;
 
 
   public AssistantService(
@@ -34,13 +35,14 @@ public class AssistantService {
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       QueryCategoryService queryCategoryService,
       CompressionQueryTransformer compressionQueryTransformer,
-      RetrievalAugmentationAdvisor retrievalAugmentationAdvisor) {
+      RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools) {
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
 
     this.clarificationClient = chatClientBuilder.clone().build();
     this.compressionQueryTransformer = compressionQueryTransformer;
     this.retrievalAugmentationAdvisor = retrievalAugmentationAdvisor;
+    this.ticketTools = ticketTools;
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
@@ -89,6 +91,7 @@ public class AssistantService {
     return chatClient.prompt()
         .system(systemPrompt)
         .user(standaloneQuestion)
+        .tools(ticketTools)
         .advisors(retrievalAugmentationAdvisor)
         .advisors(advisorSpec ->
             advisorSpec.param(
