@@ -6,6 +6,8 @@ spring:
     url: jdbc:postgresql://localhost:5432/ragdb
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+  liquibase:
+    change-log: classpath:db/changelog/changes/db.changelog-master.yaml
 
   ai:
     openai:

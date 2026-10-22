@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="002-insert-sample-tickets" author="finflow">
+    <insert tableName="tickets">
+      <column name="ticket_id" value="IT-1042"/>
+      <column name="status" value="In Progress"/>
+      <column name="issue" value="VPN connection fails"/>
+      <column name="assigned_team" value="IT Support"/>
+    </insert>
+
+    <insert tableName="tickets">
+      <column name="ticket_id" value="IT-1043"/>
+      <column name="status" value="Resolved"/>
+      <column name="issue" value="GitLab access request"/>
+      <column name="assigned_team" value="IT Support"/>
+    </insert>
+  </changeSet>
+
+</databaseChangeLog>

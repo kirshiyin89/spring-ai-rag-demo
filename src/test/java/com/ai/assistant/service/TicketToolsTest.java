@@ -1,4 +1,3 @@
-
 package com.ai.assistant.service;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,9 +22,12 @@ class TicketToolsTest {
   @Test
   void shouldReturnTicketDetailsForExistingTicket() {
     when(ticketService.findTicket("IT-1042"))
-        .thenReturn(Optional.of(
-            "Status = In Progress. Issue: VPN connection fails."
-        ));
+        .thenReturn(Optional.of(new Ticket(
+            "IT-1042",
+            "In Progress",
+            "VPN connection fails",
+            "IT Support"
+        )));
 
     String result = ticketTools.getTicketStatus("IT-1042");
 
@@ -48,7 +50,12 @@ class TicketToolsTest {
   @Test
   void shouldNormalizeTicketIdBeforeLookup() {
     when(ticketService.findTicket("IT-1042"))
-        .thenReturn(Optional.of("Status = In Progress."));
+        .thenReturn(Optional.of(new Ticket(
+            "IT-1042",
+            "In Progress",
+            "VPN connection fails",
+            "IT Support"
+        )));
 
     String result = ticketTools.getTicketStatus(" it-1042 ");
 

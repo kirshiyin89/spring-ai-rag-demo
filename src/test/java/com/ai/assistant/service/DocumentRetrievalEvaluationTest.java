@@ -421,20 +421,20 @@ class DocumentRetrievalEvaluationTest {
     Document general = Document.builder()
         .id("general")
         .text("""
-          Software requests:
-          Employees should contact IT to request software.
-          The IT team reviews installation requests.
-          """)
+            Software requests:
+            Employees should contact IT to request software.
+            The IT team reviews installation requests.
+            """)
         .metadata(Map.of("filename", "software-license-request.md"))
         .build();
 
     Document specific = Document.builder()
         .id("specific")
         .text("""
-          Software license approval:
-          A manager approves the business need for paid software.
-          IT reviews the request before purchase.
-          """)
+            Software license approval:
+            A manager approves the business need for paid software.
+            IT reviews the request before purchase.
+            """)
         .metadata(Map.of("filename", "license-approval.md"))
         .build();
 
@@ -503,8 +503,10 @@ class DocumentRetrievalEvaluationTest {
         "What is the current status of ticket IT-1042?"
     );
 
+    String normalizedAnswer = normalizeForAssertion(answer);
+
     // Verify the model produced the expected answer.
-    assertThat(answer)
+    assertThat(normalizedAnswer)
         .containsIgnoringCase("IT-1042")
         .containsIgnoringCase("In Progress");
 
@@ -520,14 +522,23 @@ class DocumentRetrievalEvaluationTest {
         conversationId,
         "What is the current status of ticket IT-9999?"
     );
+    String normalizedAnswer = normalizeForAssertion(answer);
 
-    assertThat(answer)
+    assertThat(normalizedAnswer)
         .containsIgnoringCase("IT-9999")
         .containsIgnoringCase("not found");
 
     verify(ticketService).findTicket("IT-9999");
   }
 
-
+  private String normalizeForAssertion(String text) {
+    return text
+        .replace('\u202F', ' ')
+        .replace('\u00A0', ' ')
+        .replace('\u2011', '-')
+        .replace('\u2010', '-')
+        .replace('\u2013', '-')
+        .replace('\u2014', '-');
+  }
 
 }

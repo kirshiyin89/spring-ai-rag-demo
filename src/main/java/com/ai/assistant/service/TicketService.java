@@ -2,26 +2,31 @@
 package com.ai.assistant.service;
 
 import java.util.Optional;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TicketService {
 
-  public Optional<String> findTicket(String ticketId) {
-    return switch (ticketId.toUpperCase()) {
-      case "IT-1042" -> Optional.of(
-          "Status = In Progress. "
-              + "Issue: VPN connection fails. "
-              + "Assigned team: IT Support."
-      );
+  private final JdbcClient jdbcClient;
 
-      case "IT-1043" -> Optional.of(
-          "Status = Resolved. "
-              + "Issue: GitLab access request. "
-              + "Assigned team: IT Support."
-      );
+  public TicketService(JdbcClient jdbcClient) {
+    this.jdbcClient = jdbcClient;
+  }
 
-      default -> Optional.empty();
-    };
+  public Optional<Ticket> findTicket(String ticketId) {
+    return jdbcClient.sql("""
+                SELECT ticket_id, status, issue, assigned_team
+                FROM tickets
+                WHERE ticket_id = :ticketId
+                """)
+        .param("ticketId", ticketId)
+        .query((rs, rowNum) -> new Ticket(
+            rs.getString("ticket_id"),
+            rs.getString("status"),
+            rs.getString("issue"),
+            rs.getString("assigned_team")
+        ))
+        .optional();
   }
 }

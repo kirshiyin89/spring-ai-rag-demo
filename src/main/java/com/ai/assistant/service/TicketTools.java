@@ -1,4 +1,3 @@
-
 package com.ai.assistant.service;
 
 import java.util.Locale;
@@ -24,11 +23,12 @@ public class TicketTools {
     String normalizedTicketId =
         ticketId.trim().toUpperCase(Locale.ROOT);
 
-
     return ticketService.findTicket(normalizedTicketId)
-        .map(details ->
-            "TICKET_FOUND: Ticket " + normalizedTicketId
-                + ": " + details
+        .map(ticket ->
+            "TICKET_FOUND: Ticket " + ticket.ticketId()
+                + ": Status = " + ticket.status()
+                + ". Issue: " + ticket.issue()
+                + ". Assigned team: " + ticket.assignedTeam() + "."
         )
         .orElse(
             "TICKET_NOT_FOUND: No ticket exists with the exact ID "
