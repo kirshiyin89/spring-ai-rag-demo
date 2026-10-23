@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="003-create-ticket-status-change-requests"
+    author="finflow">
+
+    <createTable tableName="ticket_status_change_requests">
+      <column name="request_id" type="UUID">
+        <constraints primaryKey="true"
+          nullable="false"/>
+      </column>
+
+      <column name="ticket_id" type="VARCHAR(20)">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="requested_status" type="VARCHAR(30)">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="requested_by" type="VARCHAR(100)">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="created_at"
+        type="TIMESTAMP WITH TIME ZONE"
+        defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="state"
+        type="VARCHAR(30)"
+        defaultValue="PENDING_APPROVAL">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <createIndex
+      tableName="ticket_status_change_requests"
+      indexName="idx_ticket_change_requests_state">
+      <column name="state"/>
+    </createIndex>
+
+  </changeSet>
+</databaseChangeLog>

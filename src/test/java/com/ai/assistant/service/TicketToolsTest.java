@@ -1,5 +1,6 @@
 package com.ai.assistant.service;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,22 +21,33 @@ class TicketToolsTest {
 
   private TicketService ticketService;
   private TicketTools ticketTools;
+  private TicketStatusChangeService statusChangeService;
+  private TicketStatusChangeRepository repository;
+
+
 
   @BeforeEach
   void setUp() {
     ticketService = mock(TicketService.class);
+    repository = mock(TicketStatusChangeRepository.class);
+
+    statusChangeService = new TicketStatusChangeService(ticketService, repository);
+
     ticketTools = new TicketTools(
         ticketService,
-        new TicketAuthorizationService()
+        new TicketAuthorizationService(),
+        statusChangeService
     );
 
+    authenticateAs("alice", "ROLE_IT_SUPPORT");
+  }
+
+  private void authenticateAs(String username, String role) {
     var authentication =
-        UsernamePasswordAuthenticationToken.authenticated(
-            "alice",
-            "not-used",
-            List.of(
-                new SimpleGrantedAuthority("ROLE_IT_SUPPORT")
-            )
+        new UsernamePasswordAuthenticationToken(
+            username,
+            "password",
+            java.util.List.of(new SimpleGrantedAuthority(role))
         );
 
     SecurityContextHolder.getContext()
@@ -136,6 +149,67 @@ class TicketToolsTest {
 
     verify(ticketService, never()).findTicket("IT-1042");
   }
+
+
+  @Test
+  void shouldCreatePendingRequestWithoutUpdatingTicket() {
+    String result = ticketTools.requestTicketStatusChange(
+        "IT-1042",
+        "Closed"
+    );
+
+    assertTrue(result.contains("APPROVAL_REQUIRED"));
+    assertTrue(result.contains("IT-1042"));
+    assertTrue(result.contains("CLOSED"));
+    assertTrue(result.contains("PENDING_APPROVAL")
+        || result.contains("Request ID"));
+    assertTrue(result.contains("No ticket changes have been made."));
+
+    // Requesting a change must not look up or modify the ticket.
+    verify(ticketService, never()).findTicket("IT-1042");
+  }
+
+  @Test
+  void shouldRejectInvalidTicketIdInTool() {
+    String result = ticketTools.requestTicketStatusChange(
+        "BAD-123",
+        "Closed"
+    );
+
+    assertTrue(result.contains("INVALID_REQUEST"));
+    verify(ticketService, never()).findTicket("BAD-123");
+  }
+
+  @Test
+  void shouldRejectUnsupportedStatusInTool() {
+    String result = ticketTools.requestTicketStatusChange(
+        "IT-1042",
+        "Delete"
+    );
+
+    assertTrue(result.contains("INVALID_REQUEST"));
+    verify(ticketService, never()).findTicket("IT-1042");
+  }
+
+  @Test
+  void shouldDenyUnauthorizedUserFromRequestingChange() {
+    authenticateAs("bob", "ROLE_EMPLOYEE");
+
+    String result = ticketTools.requestTicketStatusChange(
+        "IT-1042",
+        "Closed"
+    );
+
+    assertTrue(result.contains("ACCESS_DENIED"));
+
+    // No ticket lookup and no pending request.
+    verify(ticketService, never()).findTicket("IT-1042");
+
+    assertNull(statusChangeService.findPendingChange(
+        UUID.randomUUID()
+    ));
+  }
+
 
 
 }

@@ -29,3 +29,10 @@ spring:
 app:
   rag:
     similarity-threshold: 0.35
+  security:
+    it-support:
+      username: ${IT_SUPPORT_USERNAME}
+      password: ${IT_SUPPORT_PASSWORD}
+    it-admin:
+      username: ${IT_ADMIN_USERNAME}
+      password: ${IT_ADMIN_PASSWORD}

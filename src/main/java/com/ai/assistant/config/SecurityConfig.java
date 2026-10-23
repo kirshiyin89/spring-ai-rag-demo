@@ -18,8 +18,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http)
-      throws Exception {
+  SecurityFilterChain securityFilterChain(HttpSecurity http) {
 
     return http
         .csrf(AbstractHttpConfigurer::disable)
@@ -30,24 +29,43 @@ public class SecurityConfig {
                 org.springframework.http.HttpMethod.POST,
                 "/api/chat/load-vectors"
             ).hasRole("ADMIN")
+            .requestMatchers(
+                org.springframework.http.HttpMethod.POST,
+                "/api/tickets/changes/*/approve"
+            ).hasRole("IT_ADMIN")
             .anyRequest().permitAll()
         )
+
         .httpBasic(Customizer.withDefaults())
         .build();
   }
 
   @Bean
   UserDetailsService userDetailsService(
-      @Value("${spring.datasource.username}") String username,
-      @Value("${spring.datasource.password}") String password,
+      @Value("${spring.datasource.username}") String dbUsername,
+      @Value("${spring.datasource.password}") String dbPassword,
+      @Value("${app.security.it-support.username}") String itSupportUsername,
+      @Value("${app.security.it-support.password}") String itSupportPassword,
+      @Value("${app.security.it-admin.username}") String itAdminUsername,
+      @Value("${app.security.it-admin.password}") String itAdminPassword,
       PasswordEncoder passwordEncoder) {
 
-    var admin = User.withUsername(username)
-        .password(passwordEncoder.encode(password))
+    var dbAdmin = User.withUsername(dbUsername)
+        .password(passwordEncoder.encode(dbPassword))
         .roles("ADMIN")
         .build();
 
-    return new InMemoryUserDetailsManager(admin);
+    var itSupport = User.withUsername(itSupportUsername)
+        .password(passwordEncoder.encode(itSupportPassword))
+        .roles("IT_SUPPORT")
+        .build();
+
+    var itAdmin = User.withUsername(itAdminUsername)
+        .password(passwordEncoder.encode(itAdminPassword))
+        .roles("IT_ADMIN")
+        .build();
+
+    return new InMemoryUserDetailsManager(dbAdmin, itSupport, itAdmin);
   }
 
   @Bean

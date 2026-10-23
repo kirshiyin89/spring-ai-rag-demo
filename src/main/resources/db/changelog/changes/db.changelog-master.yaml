@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/changes/001-create-tickets-table.xml
   - include:
       file: db/changelog/changes/002-insert-sample-tickets.xml
+  - include:
+      file: db/changelog/changes/003-create-ticket-status-change-requests.xml

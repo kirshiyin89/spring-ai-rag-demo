@@ -29,4 +29,18 @@ public class TicketService {
         ))
         .optional();
   }
+
+  public boolean updateTicketStatus(String ticketId, String status) {
+    int updatedRows = jdbcClient.sql("""
+          UPDATE tickets
+          SET status = :status
+          WHERE ticket_id = :ticketId
+          """)
+        .param("status", status)
+        .param("ticketId", ticketId)
+        .update();
+
+    return updatedRows == 1;
+  }
+
 }

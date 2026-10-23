@@ -2,6 +2,7 @@
 package com.ai.assistant.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -81,4 +82,34 @@ class TicketServiceTest {
 
     verify(statementSpec).param("ticketId", "IT-9999");
   }
+
+
+  @Test
+  void shouldUpdateStatusForExistingTicket() {
+    when(statementSpec.param(eq("status"), eq("CLOSED")))
+        .thenReturn(statementSpec);
+
+    when(statementSpec.update()).thenReturn(1);
+
+    boolean updated =
+        ticketService.updateTicketStatus("IT-1042", "CLOSED");
+
+    assertTrue(updated);
+    verify(statementSpec).param("status", "CLOSED");
+    verify(statementSpec).param("ticketId", "IT-1042");
+  }
+
+  @Test
+  void shouldReturnFalseWhenTicketDoesNotExist() {
+    when(statementSpec.param(eq("status"), eq("CLOSED")))
+        .thenReturn(statementSpec);
+
+    when(statementSpec.update()).thenReturn(0);
+
+    boolean updated =
+        ticketService.updateTicketStatus("IT-9999", "CLOSED");
+
+    assertFalse(updated);
+  }
+
 }
