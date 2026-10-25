@@ -118,7 +118,17 @@ public class AssistantService {
 
         String json = entries.getFirst().get("text");
 
-        var issue = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+        var response = new com.fasterxml.jackson.databind.ObjectMapper()
+            .readTree(json);
+
+        // Handle a missing ticket before reading issue fields.
+        if (!response.path("found").asBoolean()) {
+          return response.path("message")
+              .asText("YouTrack issue " + ticketId + " was not found.");
+        }
+
+        var issue = response.path("issue");
+
         log.info("YouTrack MCP lookup completed for {}", ticketId);
 
         String status = "Unknown";
@@ -143,9 +153,6 @@ public class AssistantService {
         return "YouTrack issue " + issue.path("idReadable").asText() + ": " + issue.path("summary")
             .asText() + " — Status: " + status;
 
-      } catch (YouTrackMcpGateway.YouTrackUnavailableException ex) {
-        log.warn("YouTrack unavailable for ticket {}", ticketId, ex);
-        return "YouTrack is temporarily unavailable. Please try again later.";
       } catch (Exception e) {
         log.warn("Could not format YouTrack response for {}", ticketId, e);
         return result;
