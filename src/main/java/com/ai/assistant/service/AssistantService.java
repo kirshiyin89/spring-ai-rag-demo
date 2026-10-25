@@ -164,8 +164,29 @@ public class AssistantService {
             .readTree(json);
         log.info("YouTrack MCP lookup completed for {}", ticketId);
 
+        String status = "Unknown";
+
+        var customFields = issue.path("customFields");
+
+        if (customFields.isArray()) {
+          for (var field : customFields) {
+            if ("State".equals(field.path("name").toString()
+                .replace("\"", ""))) {
+
+              var value = field.path("value");
+              var nameNode = value.path("name");
+
+              if (!nameNode.isMissingNode() && !nameNode.isNull()) {
+                status = nameNode.toString().replace("\"", "");
+              }
+              break;
+            }
+          }
+        }
+
         return "YouTrack issue " + issue.path("idReadable").asText()
-            + ": " + issue.path("summary").asText();
+            + ": " + issue.path("summary").asText()
+            + " — Status: " + status;
 
       } catch (Exception e) {
         log.warn("Could not format YouTrack response for {}", ticketId, e);
