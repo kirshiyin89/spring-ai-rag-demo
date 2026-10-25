@@ -647,4 +647,71 @@ class DocumentRetrievalEvaluationTest {
 
     verify(youTrackMcpGateway).getIssue("DEMO-123");
   }
+  @Test
+  void shouldHandleYouTrackAuthenticationFailure() throws Exception {
+    String responseJson = """
+      {
+        "status": "AUTHENTICATION_FAILED",
+        "message": "Authentication failed"
+      }
+      """;
+
+    doReturn(mcpResponse(responseJson))
+        .when(youTrackMcpGateway)
+        .getIssue("DEMO-123");
+
+    String answer = assistantService.askWithRag(
+        "youtrack-mcp-auth-failure",
+        "What is the current status of ticket DEMO-123?");
+
+    assertThat(answer)
+        .containsIgnoringCase("not authorized")
+        .containsIgnoringCase("administrator");
+
+    verify(youTrackMcpGateway).getIssue("DEMO-123");
+  }
+  @Test
+  void shouldHandleMalformedYouTrackMcpResponse() throws Exception {
+    String malformedJson = """
+      { "status": "FOUND", "issue":
+      """;
+
+    doReturn(mcpResponse(malformedJson))
+        .when(youTrackMcpGateway)
+        .getIssue("DEMO-123");
+
+    String answer = assistantService.askWithRag(
+        "youtrack-mcp-malformed",
+        "What is the current status of ticket DEMO-123?");
+
+    assertThat(answer)
+        .containsIgnoringCase("response could not be processed")
+        .containsIgnoringCase("try again later");
+
+    verify(youTrackMcpGateway).getIssue("DEMO-123");
+  }
+
+  @Test
+  void shouldHandleUnexpectedYouTrackResponseStatus() throws Exception {
+    String responseJson = """
+      {
+        "status": "UNEXPECTED_STATUS",
+        "message": "Unexpected response"
+      }
+      """;
+
+    doReturn(mcpResponse(responseJson))
+        .when(youTrackMcpGateway)
+        .getIssue("DEMO-123");
+
+    String answer = assistantService.askWithRag(
+        "youtrack-mcp-unexpected-status",
+        "What is the current status of ticket DEMO-123?");
+
+    assertThat(answer)
+        .containsIgnoringCase("could not process")
+        .containsIgnoringCase("try again later");
+
+    verify(youTrackMcpGateway).getIssue("DEMO-123");
+  }
 }
