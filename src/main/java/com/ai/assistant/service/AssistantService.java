@@ -165,10 +165,24 @@ public class AssistantService {
         return "YouTrack issue " + issue.path("idReadable").asText() + ": " + issue.path("summary")
             .asText() + " — Status: " + status;
 
+
       } catch (Exception e) {
-        log.warn("Could not format YouTrack response for {}", ticketId, e);
-        return result;
+        String diagnosticResponse = result == null
+            ? "<null>"
+            : result.substring(0, Math.min(result.length(), 2000));
+
+        log.warn(
+            "Could not parse YouTrack MCP response for ticket {}. "
+                + "Response (truncated to 2000 characters): {}",
+            ticketId,
+            diagnosticResponse,
+            e
+        );
+
+        return "The YouTrack response could not be processed. "
+            + "Please try again later.";
       }
+
 
     } catch (YouTrackMcpGateway.YouTrackUnavailableException e) {
       log.warn("YouTrack is unavailable; lookup skipped for {}", ticketId);
