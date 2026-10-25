@@ -10,8 +10,6 @@ import org.springframework.ai.rag.Query;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
@@ -31,19 +29,14 @@ public class AssistantService {
   private final RetrievalAugmentationAdvisor retrievalAugmentationAdvisor;
   private final TicketTools ticketTools;
   private final TicketSourceRouter ticketSourceRouter;
-  private final ToolCallbackProvider toolCallbackProvider;
+  private final YouTrackMcpGateway youTrackMcpGateway;
 
-  public AssistantService(
-      ChatClient.Builder chatClientBuilder,
-      ChatMemory chatMemory,
-      @Value("classpath:/prompts/system-prompt.st")
-      Resource systemPromptResource,
+  public AssistantService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
+      @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       QueryCategoryService queryCategoryService,
       CompressionQueryTransformer compressionQueryTransformer,
-      RetrievalAugmentationAdvisor retrievalAugmentationAdvisor,
-      TicketTools ticketTools,
-      ToolCallbackProvider toolCallbackProvider, TicketSourceRouter ticketSourceRouter,
-      ToolCallbackProvider toolCallbackProvider1) {
+      RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools,
+      TicketSourceRouter ticketSourceRouter, YouTrackMcpGateway youTrackMcpGateway) {
 
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
@@ -53,21 +46,16 @@ public class AssistantService {
     this.retrievalAugmentationAdvisor = retrievalAugmentationAdvisor;
     this.ticketTools = ticketTools;
     this.ticketSourceRouter = ticketSourceRouter;
-    this.toolCallbackProvider = toolCallbackProvider1;
+    this.youTrackMcpGateway = youTrackMcpGateway;
 
-    this.chatClient = chatClientBuilder
-        .defaultAdvisors(
-            MessageChatMemoryAdvisor.builder(chatMemory).build()
-        ).defaultTools(toolCallbackProvider)
-        .build();
+    this.chatClient = chatClientBuilder.defaultAdvisors(
+        MessageChatMemoryAdvisor.builder(chatMemory).build()).build();
 
     this.systemPromptResource = systemPromptResource;
   }
 
 
-  public String askWithRag(
-      String conversationId,
-      String question) {
+  public String askWithRag(String conversationId, String question) {
 
     var route = ticketSourceRouter.route(question);
 
@@ -77,7 +65,7 @@ public class AssistantService {
       return switch (ticketRoute.source()) {
         case POSTGRES -> ticketTools.getTicketStatus(ticketRoute.ticketId());
 
-        case YOUTRACK -> askYouTrack(ticketRoute.ticketId(), question);
+        case YOUTRACK -> askYouTrack(ticketRoute.ticketId());
 
         case UNKNOWN -> "I cannot look up ticket " + ticketRoute.ticketId()
             + " because its ticket prefix is not supported.";
@@ -92,14 +80,9 @@ public class AssistantService {
     String standaloneQuestion = question;
 
     if (!history.isEmpty()) {
-      Query queryWithHistory = Query.builder()
-          .text(question)
-          .history(history)
-          .build();
+      Query queryWithHistory = Query.builder().text(question).history(history).build();
 
-      standaloneQuestion = compressionQueryTransformer
-          .transform(queryWithHistory)
-          .text();
+      standaloneQuestion = compressionQueryTransformer.transform(queryWithHistory).text();
     }
 
     String category = queryCategoryService.classify(standaloneQuestion);
@@ -111,48 +94,23 @@ public class AssistantService {
 
     log.info("Standalone question: {}", standaloneQuestion);
 
-    String systemPrompt = new PromptTemplate(systemPromptResource)
-        .render();
+    String systemPrompt = new PromptTemplate(systemPromptResource).render();
 
-    return chatClient.prompt()
-        .system(systemPrompt)
-        .user(standaloneQuestion)
-        .tools(ticketTools)
+    return chatClient.prompt().system(systemPrompt).user(standaloneQuestion).tools(ticketTools)
         .advisors(retrievalAugmentationAdvisor)
-        .advisors(advisorSpec ->
-            advisorSpec.param(
-                ChatMemory.CONVERSATION_ID,
-                conversationId
-            )
-        )
-        .call()
-        .content();
+        .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
+        .call().content();
   }
 
-  private String askYouTrack(String ticketId, String question) {
-    ToolCallback callback = java.util.Arrays.stream(
-            toolCallbackProvider.getToolCallbacks())
-        .filter(tool -> "getYouTrackIssue".equals(
-            tool.getToolDefinition().name()))
-        .findFirst()
-        .orElse(null);
-
-    if (callback == null) {
-      log.error("YouTrack MCP tool getYouTrackIssue was not found");
-      return "The YouTrack lookup tool is currently unavailable.";
-    }
-
+  private String askYouTrack(String ticketId) {
     try {
-      String input = "{\"issueId\":\"" + ticketId + "\"}";
-      String result = callback.call(input);
+      String result = youTrackMcpGateway.getIssue(ticketId);
 
       try {
-        var outer = new com.fasterxml.jackson.core.type.TypeReference<
-            java.util.List<java.util.Map<String, String>>>() {
+        var outer = new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, String>>>() {
         };
 
-        var entries = new com.fasterxml.jackson.databind.ObjectMapper()
-            .readValue(result, outer);
+        var entries = new com.fasterxml.jackson.databind.ObjectMapper().readValue(result, outer);
 
         if (entries.isEmpty()) {
           return "No YouTrack issue details were returned.";
@@ -160,8 +118,7 @@ public class AssistantService {
 
         String json = entries.getFirst().get("text");
 
-        var issue = new com.fasterxml.jackson.databind.ObjectMapper()
-            .readTree(json);
+        var issue = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
         log.info("YouTrack MCP lookup completed for {}", ticketId);
 
         String status = "Unknown";
@@ -170,8 +127,7 @@ public class AssistantService {
 
         if (customFields.isArray()) {
           for (var field : customFields) {
-            if ("State".equals(field.path("name").toString()
-                .replace("\"", ""))) {
+            if ("State".equals(field.path("name").toString().replace("\"", ""))) {
 
               var value = field.path("value");
               var nameNode = value.path("name");
@@ -184,45 +140,43 @@ public class AssistantService {
           }
         }
 
-        return "YouTrack issue " + issue.path("idReadable").asText()
-            + ": " + issue.path("summary").asText()
-            + " — Status: " + status;
+        return "YouTrack issue " + issue.path("idReadable").asText() + ": " + issue.path("summary")
+            .asText() + " — Status: " + status;
 
+      } catch (YouTrackMcpGateway.YouTrackUnavailableException ex) {
+        log.warn("YouTrack unavailable for ticket {}", ticketId, ex);
+        return "YouTrack is temporarily unavailable. Please try again later.";
       } catch (Exception e) {
         log.warn("Could not format YouTrack response for {}", ticketId, e);
         return result;
       }
-    } catch (Exception e) {
-      log.error("YouTrack lookup failed for {}", ticketId, e);
-      return "The YouTrack lookup failed. Please try again later.";
+
+    } catch (YouTrackMcpGateway.YouTrackUnavailableException e) {
+      log.warn("YouTrack is unavailable; lookup skipped for {}", ticketId);
+      return "YouTrack is temporarily unavailable. Please try again later.";
     }
   }
 
 
   private String generateClarification(String question) {
-    return Objects.requireNonNull(clarificationClient.prompt()
-            .system("""
-                You are a friendly assistant for FinFlow Technologies,
-                helping employees with internal company documentation.
-                
-                The employee's request is ambiguous or lacks enough
-                detail to identify what they need.
-                
-                Ask one short, natural follow-up question that helps
-                identify their intent.
-                
-                Use the employee's original wording and context.
-                Offer relevant examples from these topics when useful:
-                onboarding, GitLab access, VPN and WLAN, hardware
-                requests, software licenses, and company information.
-                
-                Do not answer the original question.
-                Do not invent company policies or procedures.
-                Do not ask multiple questions at once.
-                """)
-            .user(question)
-            .call()
-            .content())
-        .trim();
+    return Objects.requireNonNull(clarificationClient.prompt().system("""
+        You are a friendly assistant for FinFlow Technologies,
+        helping employees with internal company documentation.
+        
+        The employee's request is ambiguous or lacks enough
+        detail to identify what they need.
+        
+        Ask one short, natural follow-up question that helps
+        identify their intent.
+        
+        Use the employee's original wording and context.
+        Offer relevant examples from these topics when useful:
+        onboarding, GitLab access, VPN and WLAN, hardware
+        requests, software licenses, and company information.
+        
+        Do not answer the original question.
+        Do not invent company policies or procedures.
+        Do not ask multiple questions at once.
+        """).user(question).call().content()).trim();
   }
 }

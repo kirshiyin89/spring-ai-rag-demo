@@ -20,15 +20,7 @@ spring:
 
     mcp:
       client:
-        name: finflow-assistant
-        version: 0.0.1
-        type: SYNC
-        request-timeout: 30s
-        streamable-http:
-          connections:
-            youtrack:
-              url: http://localhost:8090
-              endpoint: /mcp
+        enabled: false
 
     model:
       embedding: transformers
@@ -41,6 +33,11 @@ spring:
 app:
   rag:
     similarity-threshold: 0.35
+  integrations:
+    youtrack:
+      url: http://localhost:8090
+      endpoint: /mcp
+      request-timeout: 10s
   security:
     it-support:
       username: ${IT_SUPPORT_USERNAME}
