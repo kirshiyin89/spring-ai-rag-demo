@@ -118,8 +118,18 @@ public class AssistantService {
 
         String json = entries.getFirst().get("text");
 
+        if (json == null || json.isBlank()) {
+          throw new IllegalArgumentException(
+              "MCP response did not contain a text payload");
+        }
+
         var response = new com.fasterxml.jackson.databind.ObjectMapper()
             .readTree(json);
+
+        if (response == null || !response.isObject()) {
+          throw new IllegalArgumentException(
+              "MCP response payload was not a JSON object");
+        }
 
         // Handle a missing ticket before reading issue fields.
         String statusCode = response.path("status").asText();
