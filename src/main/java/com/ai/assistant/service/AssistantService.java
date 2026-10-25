@@ -122,9 +122,21 @@ public class AssistantService {
             .readTree(json);
 
         // Handle a missing ticket before reading issue fields.
-        if (!response.path("found").asBoolean()) {
+        String statusCode = response.path("status").asText();
+
+        if ("NOT_FOUND".equals(statusCode)) {
           return response.path("message")
               .asText("YouTrack issue " + ticketId + " was not found.");
+        }
+
+        if ("AUTHENTICATION_FAILED".equals(statusCode)) {
+          log.error("YouTrack authentication or authorization failed.");
+          return "The YouTrack integration is not authorized. Please contact the administrator.";
+        }
+
+        if (!"FOUND".equals(statusCode)) {
+          log.error("Unexpected YouTrack response status: {}", statusCode);
+          return "Could not process the YouTrack response. Please try again later.";
         }
 
         var issue = response.path("issue");
