@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -25,12 +28,15 @@ import org.springframework.ai.rag.Query;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 
@@ -38,7 +44,13 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * IT Test. It tests the actual embedding and pgvector search path instead of mocking the vector
  * store. Don't forget to add the LLM API KEY to the env vars of this test!
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+    "app.security.it-support.username=test-it-support",
+    "app.security.it-support.password=test-support-password",
+    "app.security.it-admin.username=test-it-admin",
+    "app.security.it-admin.password=test-admin-password"
+})
+@AutoConfigureMockMvc
 class DocumentRetrievalEvaluationTest {
 
   @Autowired
@@ -61,6 +73,12 @@ class DocumentRetrievalEvaluationTest {
 
   @MockitoSpyBean
   private YouTrackMcpGateway youTrackMcpGateway;
+
+  @MockitoSpyBean
+  private VectorStoreService vectorStoreService;
+
+  @Autowired
+  private MockMvc mockMvc;
 
 
   private static final String GITLAB_ID =
@@ -714,4 +732,55 @@ class DocumentRetrievalEvaluationTest {
 
     verify(youTrackMcpGateway).getIssue("DEMO-123");
   }
+
+
+  @Test
+  void shouldRejectUnauthenticatedVectorLoading() throws Exception {
+    mockMvc.perform(post("/api/chat/load-vectors"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void shouldRejectItSupportVectorLoading() throws Exception {
+    mockMvc.perform(post("/api/chat/load-vectors")
+            .with(SecurityMockMvcRequestPostProcessors.httpBasic(
+                "test-it-support", "test-support-password")))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void shouldAllowAdminPastVectorLoadingAuthorization() throws Exception {
+    doNothing().when(vectorStoreService).loadDocuments();
+
+    mockMvc.perform(post("/api/chat/load-vectors")
+            .with(SecurityMockMvcRequestPostProcessors.httpBasic(
+                postgres.getUsername(), postgres.getPassword())))
+        .andExpect(status().isOk());
+
+    verify(vectorStoreService).loadDocuments();
+  }
+
+  @Test
+  void shouldRejectUnauthenticatedTicketApproval() throws Exception {
+    mockMvc.perform(post("/api/tickets/changes/1/approve"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void shouldRejectItSupportTicketApproval() throws Exception {
+    mockMvc.perform(post("/api/tickets/changes/1/approve")
+            .with(SecurityMockMvcRequestPostProcessors.httpBasic(
+                "test-it-support", "test-support-password")))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void shouldAllowItAdminPastTicketApprovalAuthorization() throws Exception {
+    mockMvc.perform(post("/api/tickets/changes/1/approve")
+            .with(SecurityMockMvcRequestPostProcessors.httpBasic(
+                "test-it-admin", "test-admin-password")))
+        .andExpect(result -> assertThat(result.getResponse().getStatus())
+            .isNotIn(401, 403));
+  }
+
 }
