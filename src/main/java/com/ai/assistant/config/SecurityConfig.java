@@ -38,7 +38,7 @@ public class SecurityConfig {
                 "/api/youtrack/workflow",
                 "/api/youtrack/review-prompt",
                 "/api/youtrack/review"
-            ).authenticated()
+            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN", "ADMIN")
             .anyRequest().permitAll()
         )
 
