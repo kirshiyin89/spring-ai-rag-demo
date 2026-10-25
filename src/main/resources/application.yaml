@@ -18,6 +18,18 @@ spring:
         extra-body:
           include_reasoning: false
 
+    mcp:
+      client:
+        name: finflow-assistant
+        version: 0.0.1
+        type: SYNC
+        request-timeout: 30s
+        streamable-http:
+          connections:
+            youtrack:
+              url: http://localhost:8090
+              endpoint: /mcp
+
     model:
       embedding: transformers
 

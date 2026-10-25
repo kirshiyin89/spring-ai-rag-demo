@@ -10,6 +10,8 @@ import org.springframework.ai.rag.Query;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
@@ -28,14 +30,21 @@ public class AssistantService {
   private final CompressionQueryTransformer compressionQueryTransformer;
   private final RetrievalAugmentationAdvisor retrievalAugmentationAdvisor;
   private final TicketTools ticketTools;
-
+  private final TicketSourceRouter ticketSourceRouter;
+  private final ToolCallbackProvider toolCallbackProvider;
 
   public AssistantService(
-      ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
-      @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
+      ChatClient.Builder chatClientBuilder,
+      ChatMemory chatMemory,
+      @Value("classpath:/prompts/system-prompt.st")
+      Resource systemPromptResource,
       QueryCategoryService queryCategoryService,
       CompressionQueryTransformer compressionQueryTransformer,
-      RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools) {
+      RetrievalAugmentationAdvisor retrievalAugmentationAdvisor,
+      TicketTools ticketTools,
+      ToolCallbackProvider toolCallbackProvider, TicketSourceRouter ticketSourceRouter,
+      ToolCallbackProvider toolCallbackProvider1) {
+
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
 
@@ -43,11 +52,13 @@ public class AssistantService {
     this.compressionQueryTransformer = compressionQueryTransformer;
     this.retrievalAugmentationAdvisor = retrievalAugmentationAdvisor;
     this.ticketTools = ticketTools;
+    this.ticketSourceRouter = ticketSourceRouter;
+    this.toolCallbackProvider = toolCallbackProvider1;
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(
             MessageChatMemoryAdvisor.builder(chatMemory).build()
-        )
+        ).defaultTools(toolCallbackProvider)
         .build();
 
     this.systemPromptResource = systemPromptResource;
@@ -57,6 +68,21 @@ public class AssistantService {
   public String askWithRag(
       String conversationId,
       String question) {
+
+    var route = ticketSourceRouter.route(question);
+
+    if (route.isPresent()) {
+      var ticketRoute = route.get();
+
+      return switch (ticketRoute.source()) {
+        case POSTGRES -> ticketTools.getTicketStatus(ticketRoute.ticketId());
+
+        case YOUTRACK -> askYouTrack(ticketRoute.ticketId(), question);
+
+        case UNKNOWN -> "I cannot look up ticket " + ticketRoute.ticketId()
+            + " because its ticket prefix is not supported.";
+      };
+    }
 
     List<Message> history = chatMemory.get(conversationId);
 
@@ -101,6 +127,54 @@ public class AssistantService {
         )
         .call()
         .content();
+  }
+
+  private String askYouTrack(String ticketId, String question) {
+    ToolCallback callback = java.util.Arrays.stream(
+            toolCallbackProvider.getToolCallbacks())
+        .filter(tool -> "getYouTrackIssue".equals(
+            tool.getToolDefinition().name()))
+        .findFirst()
+        .orElse(null);
+
+    if (callback == null) {
+      log.error("YouTrack MCP tool getYouTrackIssue was not found");
+      return "The YouTrack lookup tool is currently unavailable.";
+    }
+
+    try {
+      String input = "{\"issueId\":\"" + ticketId + "\"}";
+      String result = callback.call(input);
+
+      try {
+        var outer = new com.fasterxml.jackson.core.type.TypeReference<
+            java.util.List<java.util.Map<String, String>>>() {
+        };
+
+        var entries = new com.fasterxml.jackson.databind.ObjectMapper()
+            .readValue(result, outer);
+
+        if (entries.isEmpty()) {
+          return "No YouTrack issue details were returned.";
+        }
+
+        String json = entries.getFirst().get("text");
+
+        var issue = new com.fasterxml.jackson.databind.ObjectMapper()
+            .readTree(json);
+        log.info("YouTrack MCP lookup completed for {}", ticketId);
+
+        return "YouTrack issue " + issue.path("idReadable").asText()
+            + ": " + issue.path("summary").asText();
+
+      } catch (Exception e) {
+        log.warn("Could not format YouTrack response for {}", ticketId, e);
+        return result;
+      }
+    } catch (Exception e) {
+      log.error("YouTrack lookup failed for {}", ticketId, e);
+      return "The YouTrack lookup failed. Please try again later.";
+    }
   }
 
 
