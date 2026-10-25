@@ -38,6 +38,7 @@ app:
       url: http://localhost:8090
       endpoint: /mcp
       request-timeout: 10s
+      shared-secret: ${MCP_SHARED_SECRET}
   security:
     it-support:
       username: ${IT_SUPPORT_USERNAME}

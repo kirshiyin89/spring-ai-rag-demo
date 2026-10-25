@@ -25,25 +25,27 @@ class YouTrackMcpNetworkIntegrationTest {
     YouTrackMcpGateway youTrackMcpGateway(
         @Value("${app.integrations.youtrack.url}") String url,
         @Value("${app.integrations.youtrack.endpoint}") String endpoint,
-        @Value("${app.integrations.youtrack.request-timeout}") String timeout) {
+        @Value("${app.integrations.youtrack.request-timeout}") String timeout,
+        @Value("${app.integrations.youtrack.shared-secret}") String sharedSecret) {
 
       return new YouTrackMcpGateway(
           url,
           endpoint,
-          java.time.Duration.parse("PT" + timeout.replace("s", "S"))
+          java.time.Duration.parse("PT" + timeout.replace("s", "S")),
+          sharedSecret
       );
     }
-  }
 
-  @Autowired
-  private YouTrackMcpGateway youTrackMcpGateway;
+    @Autowired
+    private YouTrackMcpGateway youTrackMcpGateway;
 
-  @Test
-  void shouldConnectToMcpServerAndRetrieveIssue() {
-    String response = youTrackMcpGateway.getIssue("DEMO-123");
+    @Test
+    void shouldConnectToMcpServerAndRetrieveIssue() {
+      String response = youTrackMcpGateway.getIssue("DEMO-123");
 
-    assertThat(response)
-        .isNotBlank()
-        .contains("DEMO-123");
+      assertThat(response)
+          .isNotBlank()
+          .contains("DEMO-123");
+    }
   }
 }

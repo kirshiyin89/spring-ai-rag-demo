@@ -26,6 +26,8 @@ public class YouTrackMcpGateway implements AutoCloseable {
   private ToolCallback issueCallback;
   private Instant retryAfter = Instant.MIN;
 
+  private final String sharedSecret;
+
   private static final Duration RETRY_COOLDOWN =
       Duration.ofSeconds(5);
 
@@ -33,10 +35,13 @@ public class YouTrackMcpGateway implements AutoCloseable {
       @Value("${app.integrations.youtrack.url}") String url,
       @Value("${app.integrations.youtrack.endpoint}") String endpoint,
       @Value("${app.integrations.youtrack.request-timeout:10s}")
-      Duration requestTimeout) {
+      Duration requestTimeout,
+      @Value("${app.integrations.youtrack.shared-secret}")
+      String sharedSecret) {
     this.url = url;
     this.endpoint = endpoint;
     this.requestTimeout = requestTimeout;
+    this.sharedSecret = sharedSecret;
   }
 
   public synchronized String getIssue(String issueId) {
@@ -79,6 +84,10 @@ public class YouTrackMcpGateway implements AutoCloseable {
       var transport = HttpClientStreamableHttpTransport
           .builder(url)
           .endpoint(endpoint)
+          .httpRequestCustomizer(
+              (requestBuilder, method, requestUri, body, context) ->
+                  requestBuilder.header("X-MCP-Secret", sharedSecret)
+          )
           .build();
 
       client = McpClient.sync(transport)
