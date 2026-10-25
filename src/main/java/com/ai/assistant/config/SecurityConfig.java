@@ -33,6 +33,12 @@ public class SecurityConfig {
                 org.springframework.http.HttpMethod.POST,
                 "/api/tickets/changes/*/approve"
             ).hasRole("IT_ADMIN")
+            .requestMatchers(
+                org.springframework.http.HttpMethod.GET,
+                "/api/youtrack/workflow",
+                "/api/youtrack/review-prompt",
+                "/api/youtrack/review"
+            ).authenticated()
             .anyRequest().permitAll()
         )
 
