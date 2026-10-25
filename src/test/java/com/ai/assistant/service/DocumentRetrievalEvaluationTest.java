@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +25,9 @@ import org.springframework.ai.rag.Query;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -52,6 +58,9 @@ class DocumentRetrievalEvaluationTest {
 
   @MockitoSpyBean
   private TicketService ticketService;
+
+  @MockitoSpyBean
+  private YouTrackMcpGateway youTrackMcpGateway;
 
 
   private static final String GITLAB_ID =
@@ -316,6 +325,7 @@ class DocumentRetrievalEvaluationTest {
         HARDWARE_ID,
         LICENSE_APPROVAL_ID
     ));
+    SecurityContextHolder.clearContext();
   }
 
   @Test
@@ -496,6 +506,8 @@ class DocumentRetrievalEvaluationTest {
 
   @Test
   void shouldCallTicketToolForTicketStatusQuestion() {
+    authenticateAsItSupport();
+
     String conversationId = "ticket-tool-integration";
 
     String answer = assistantService.askWithRag(
@@ -516,6 +528,7 @@ class DocumentRetrievalEvaluationTest {
 
   @Test
   void shouldReportUnknownTicketWhenTicketDoesNotExist() {
+    authenticateAsItSupport();
     String conversationId = "unknown-ticket-integration";
 
     String answer = assistantService.askWithRag(
@@ -524,9 +537,9 @@ class DocumentRetrievalEvaluationTest {
     );
     String normalizedAnswer = normalizeForAssertion(answer);
 
-    assertThat(normalizedAnswer)
-        .containsIgnoringCase("IT-9999")
-        .containsIgnoringCase("not found");
+    assertThat(answer)
+        .contains("IT-9999")
+        .contains("TICKET_NOT_FOUND");
 
     verify(ticketService).findTicket("IT-9999");
   }
@@ -541,4 +554,97 @@ class DocumentRetrievalEvaluationTest {
         .replace('\u2014', '-');
   }
 
+  private void authenticateAsItSupport() {
+    var authentication =
+        UsernamePasswordAuthenticationToken.authenticated(
+            "test-it-support",
+            "not-used",
+            List.of(new SimpleGrantedAuthority("ROLE_IT_SUPPORT")));
+
+    SecurityContextHolder.getContext()
+        .setAuthentication(authentication);
+  }
+
+  private String mcpResponse(String responseJson) throws Exception {
+    return new ObjectMapper().writeValueAsString(
+        List.of(Map.of("text", responseJson)));
+  }
+
+  @Test
+  void shouldRetrieveYouTrackIssueThroughMcpRouting() throws Exception {
+    String responseJson = """
+      {
+        "status": "FOUND",
+        "issue": {
+          "idReadable": "DEMO-123",
+          "summary": "VPN access fails",
+          "customFields": [
+            {
+              "name": "State",
+              "value": {
+                "name": "In Progress"
+              }
+            }
+          ]
+        }
+      }
+      """;
+
+    doReturn(mcpResponse(responseJson))
+        .when(youTrackMcpGateway)
+        .getIssue("DEMO-123");
+
+    String answer = assistantService.askWithRag(
+        "youtrack-mcp-success",
+        "What is the current status of ticket DEMO-123?");
+
+    assertThat(answer)
+        .contains("DEMO-123")
+        .contains("VPN access fails")
+        .contains("In Progress");
+
+    verify(youTrackMcpGateway).getIssue("DEMO-123");
+  }
+
+  @Test
+  void shouldReportMissingYouTrackIssue() throws Exception {
+    String responseJson = """
+      {
+        "status": "NOT_FOUND",
+        "message": "YouTrack issue DEMO-999 was not found."
+      }
+      """;
+
+    doReturn(mcpResponse(responseJson))
+        .when(youTrackMcpGateway)
+        .getIssue("DEMO-999");
+
+    String answer = assistantService.askWithRag(
+        "youtrack-mcp-not-found",
+        "What is the status of ticket DEMO-999?");
+
+    assertThat(answer)
+        .contains("DEMO-999")
+        .containsIgnoringCase("not found");
+
+    verify(youTrackMcpGateway).getIssue("DEMO-999");
+  }
+
+  @Test
+  void shouldHandleUnavailableYouTrackMcpService() {
+    doThrow(new YouTrackMcpGateway.YouTrackUnavailableException(
+        "YouTrack is unavailable.", null))
+        .when(youTrackMcpGateway)
+        .getIssue("DEMO-123");
+
+    String answer = assistantService.askWithRag(
+        "youtrack-mcp-unavailable",
+        "What is the current status of ticket DEMO-123?");
+
+    assertThat(answer)
+        .containsIgnoringCase("temporarily unavailable")
+        .containsIgnoringCase("try again later");
+
+    verify(youTrackMcpGateway).getIssue("DEMO-123");
+  }
 }
