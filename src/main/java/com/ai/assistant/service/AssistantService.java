@@ -1,6 +1,10 @@
 package com.ai.assistant.service;
 
+import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -55,52 +59,112 @@ public class AssistantService {
   }
 
 
+
   public String askWithRag(String conversationId, String question) {
-
-    var route = ticketSourceRouter.route(question);
-
-    if (route.isPresent()) {
-      var ticketRoute = route.get();
-
-      return switch (ticketRoute.source()) {
-        case POSTGRES -> ticketTools.getTicketStatus(ticketRoute.ticketId());
-
-        case YOUTRACK -> askYouTrack(ticketRoute.ticketId());
-
-        case UNKNOWN -> "I cannot look up ticket " + ticketRoute.ticketId()
-            + " because its ticket prefix is not supported.";
-      };
-    }
-
     List<Message> history = chatMemory.get(conversationId);
 
     log.info("History messages: {}", history.size());
     log.info("Original question: {}", question);
 
+    // Retrieve ticket context without returning early.
+    String ticketContext = retrieveTicketContext(question);
+
     String standaloneQuestion = question;
 
     if (!history.isEmpty()) {
-      Query queryWithHistory = Query.builder().text(question).history(history).build();
+      Query queryWithHistory = Query.builder()
+          .text(question)
+          .history(history)
+          .build();
 
-      standaloneQuestion = compressionQueryTransformer.transform(queryWithHistory).text();
+      standaloneQuestion =
+          compressionQueryTransformer.transform(queryWithHistory).text();
     }
 
     String category = queryCategoryService.classify(standaloneQuestion);
     log.info("Classified category: {}", category);
 
-    if ("CLARIFY".equalsIgnoreCase(category)) {
+    // Preserve clarification for ordinary questions, but don't
+    // discard a question that already contains a ticket reference.
+    if ("CLARIFY".equalsIgnoreCase(category)
+        && ticketContext.isBlank()) {
       return generateClarification(question);
     }
 
-    log.info("Standalone question: {}", standaloneQuestion);
-
     String systemPrompt = new PromptTemplate(systemPromptResource).render();
 
-    return chatClient.prompt().system(systemPrompt).user(standaloneQuestion).tools(ticketTools)
+    String userMessage = standaloneQuestion;
+
+    if (!ticketContext.isBlank()) {
+      userMessage += """
+
+            Retrieved ticket information:
+            Use the following results as factual context.
+            If a ticket lookup failed, report that clearly.
+            Do not invent ticket details.
+
+            """ + ticketContext;
+    }
+
+    return chatClient.prompt()
+        .system(systemPrompt)
+        .user(userMessage)
+        .tools(ticketTools)
         .advisors(retrievalAugmentationAdvisor)
-        .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
-        .call().content();
+        .advisors(advisorSpec ->
+            advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
+        .call()
+        .content();
   }
+
+  private String retrieveTicketContext(String question) {
+    Pattern pattern = Pattern.compile(
+        "\\b([A-Z]+-\\d+)\\b",
+        Pattern.CASE_INSENSITIVE);
+
+    Matcher matcher = pattern.matcher(question);
+    Set<String> ticketIds = new LinkedHashSet<>();
+
+    while (matcher.find()) {
+      ticketIds.add(matcher.group(1).toUpperCase(java.util.Locale.ROOT));
+    }
+
+    if (ticketIds.isEmpty()) {
+      return "";
+    }
+
+    StringBuilder context = new StringBuilder();
+
+    for (String ticketId : ticketIds) {
+      var route = ticketSourceRouter.route(ticketId);
+
+      if (route.isEmpty()) {
+        continue;
+      }
+
+      var ticketRoute = route.get();
+
+      String result = switch (ticketRoute.source()) {
+        case POSTGRES ->
+            ticketTools.getTicketStatus(ticketRoute.ticketId());
+
+        case YOUTRACK ->
+            askYouTrack(ticketRoute.ticketId());
+
+        case UNKNOWN ->
+            "Unsupported ticket prefix for " + ticketRoute.ticketId();
+      };
+
+      context.append("- ")
+          .append(ticketId)
+          .append(": ")
+          .append(result)
+          .append("\n");
+    }
+
+    return context.toString();
+  }
+
 
   private String askYouTrack(String ticketId) {
     try {
