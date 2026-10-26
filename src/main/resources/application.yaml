@@ -46,3 +46,9 @@ app:
     it-admin:
       username: ${IT_ADMIN_USERNAME}
       password: ${IT_ADMIN_PASSWORD}
+
+logging:
+  level:
+    org.springframework.ai: DEBUG
+    org.springframework.web.client: DEBUG
+    org.springframework.http.client: DEBUG

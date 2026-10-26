@@ -129,4 +129,9 @@ public class AiConfig {
         .build();
   }
 
+  @Bean
+  ChatClient toolCallingChatClient(ChatClient.Builder builder) {
+    return builder.clone().build();
+  }
+
 }
