@@ -15,6 +15,8 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
 
@@ -34,13 +36,15 @@ public class AssistantService {
   private final TicketTools ticketTools;
   private final TicketSourceRouter ticketSourceRouter;
   private final YouTrackMcpGateway youTrackMcpGateway;
+  private final TicketAuthorizationService ticketAuthorizationService;
 
   public AssistantService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       QueryCategoryService queryCategoryService,
       CompressionQueryTransformer compressionQueryTransformer,
       RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools,
-      TicketSourceRouter ticketSourceRouter, YouTrackMcpGateway youTrackMcpGateway) {
+      TicketSourceRouter ticketSourceRouter, YouTrackMcpGateway youTrackMcpGateway,
+      TicketAuthorizationService ticketAuthorizationService) {
 
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
@@ -51,6 +55,7 @@ public class AssistantService {
     this.ticketTools = ticketTools;
     this.ticketSourceRouter = ticketSourceRouter;
     this.youTrackMcpGateway = youTrackMcpGateway;
+    this.ticketAuthorizationService = ticketAuthorizationService;
 
     this.chatClient = chatClientBuilder.defaultAdvisors(
         MessageChatMemoryAdvisor.builder(chatMemory).build()).build();
@@ -59,14 +64,22 @@ public class AssistantService {
   }
 
 
-
   public String askWithRag(String conversationId, String question) {
     List<Message> history = chatMemory.get(conversationId);
 
     log.info("History messages: {}", history.size());
     log.info("Original question: {}", question);
 
-    // Retrieve ticket context without returning early.
+    // Check authorization before retrieving ticket information.
+    if (ticketSourceRouter.route(question).isPresent()) {
+      Authentication authentication =
+          SecurityContextHolder.getContext().getAuthentication();
+
+      if (!ticketAuthorizationService.canReadTickets(authentication)) {
+        return "You are not authorized to access ticket information.";
+      }
+    }
+
     String ticketContext = retrieveTicketContext(question);
 
     String standaloneQuestion = question;
@@ -84,32 +97,38 @@ public class AssistantService {
     String category = queryCategoryService.classify(standaloneQuestion);
     log.info("Classified category: {}", category);
 
-    // Preserve clarification for ordinary questions, but don't
-    // discard a question that already contains a ticket reference.
     if ("CLARIFY".equalsIgnoreCase(category)
         && ticketContext.isBlank()) {
       return generateClarification(question);
     }
 
-    String systemPrompt = new PromptTemplate(systemPromptResource).render();
+    String systemPrompt =
+        new PromptTemplate(systemPromptResource).render();
 
     String userMessage = standaloneQuestion;
 
     if (!ticketContext.isBlank()) {
       userMessage += """
-
-            Retrieved ticket information:
-            Use the following results as factual context.
-            If a ticket lookup failed, report that clearly.
-            Do not invent ticket details.
-
-            """ + ticketContext;
+          
+          Retrieved ticket information:
+          Use the following results as factual context.
+          If a ticket lookup failed, report that clearly.
+          Do not invent ticket details.
+          
+          """ + ticketContext;
     }
 
-    return chatClient.prompt()
+    var promptSpec = chatClient.prompt()
         .system(systemPrompt)
-        .user(userMessage)
-        .tools(ticketTools)
+        .user(userMessage);
+
+// Ticket IDs have already been handled by Java routing.
+// Don't let the model attempt a second lookup using the wrong source.
+    if (ticketSourceRouter.route(question).isEmpty()) {
+      promptSpec.tools(ticketTools);
+    }
+
+    return promptSpec
         .advisors(retrievalAugmentationAdvisor)
         .advisors(advisorSpec ->
             advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
@@ -145,14 +164,11 @@ public class AssistantService {
       var ticketRoute = route.get();
 
       String result = switch (ticketRoute.source()) {
-        case POSTGRES ->
-            ticketTools.getTicketStatus(ticketRoute.ticketId());
+        case POSTGRES -> ticketTools.getTicketStatus(ticketRoute.ticketId());
 
-        case YOUTRACK ->
-            askYouTrack(ticketRoute.ticketId());
+        case YOUTRACK -> askYouTrack(ticketRoute.ticketId());
 
-        case UNKNOWN ->
-            "Unsupported ticket prefix for " + ticketRoute.ticketId();
+        case UNKNOWN -> "Unsupported ticket prefix for " + ticketRoute.ticketId();
       };
 
       context.append("- ")
