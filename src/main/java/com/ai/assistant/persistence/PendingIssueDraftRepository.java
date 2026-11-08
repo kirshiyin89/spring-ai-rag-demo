@@ -17,7 +17,7 @@ public interface PendingIssueDraftRepository
             String conversationId
         );
 
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
     UPDATE PendingIssueDraftEntity d
     SET d.status = :creating
