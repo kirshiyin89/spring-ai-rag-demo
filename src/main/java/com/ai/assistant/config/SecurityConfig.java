@@ -39,6 +39,20 @@ public class SecurityConfig {
                 "/api/youtrack/review-prompt",
                 "/api/youtrack/review"
             ).hasAnyRole("IT_SUPPORT", "IT_ADMIN", "ADMIN")
+            .requestMatchers(
+                org.springframework.http.HttpMethod.POST,
+                "/api/chat/issue-draft"
+            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
+            .requestMatchers(
+                org.springframework.http.HttpMethod.POST,
+                "/api/chat/issue-draft/*/approve",
+                "/api/chat/issue-draft/*/cancel"
+            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
+
+            .requestMatchers(
+                org.springframework.http.HttpMethod.PUT,
+                "/api/chat/issue-draft/*"
+            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
             .anyRequest().permitAll()
         )
 

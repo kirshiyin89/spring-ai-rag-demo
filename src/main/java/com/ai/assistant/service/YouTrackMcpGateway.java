@@ -1,5 +1,6 @@
 package com.ai.assistant.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -31,17 +32,25 @@ public class YouTrackMcpGateway implements AutoCloseable {
   private static final Duration RETRY_COOLDOWN =
       Duration.ofSeconds(5);
 
+  private ToolCallback createIssueCallback;
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
+  private final String youTrackBaseUrl;
+
   public YouTrackMcpGateway(
       @Value("${app.integrations.youtrack.url}") String url,
       @Value("${app.integrations.youtrack.endpoint}") String endpoint,
       @Value("${app.integrations.youtrack.request-timeout:10s}")
       Duration requestTimeout,
       @Value("${app.integrations.youtrack.shared-secret}")
-      String sharedSecret) {
+      String sharedSecret,
+      @Value("${app.integrations.youtrack.base-url}")
+      String youTrackBaseUrl) {
     this.url = url;
     this.endpoint = endpoint;
     this.requestTimeout = requestTimeout;
     this.sharedSecret = sharedSecret;
+    this.youTrackBaseUrl = youTrackBaseUrl;
   }
 
   public synchronized String getIssue(String issueId) {
@@ -202,6 +211,7 @@ public class YouTrackMcpGateway implements AutoCloseable {
 
   private void invalidateClient() {
     issueCallback = null;
+    createIssueCallback = null;
 
     if (client != null) {
       try {
@@ -212,6 +222,91 @@ public class YouTrackMcpGateway implements AutoCloseable {
         client = null;
       }
     }
+  }
+
+
+  public synchronized CreatedIssue createIssue(
+      String summary,
+      String description
+  ) {
+    try {
+      ToolCallback callback = getOrCreateCreateIssueCallback();
+
+      String input = objectMapper.writeValueAsString(
+          Map.of(
+              "summary", summary,
+              "description", description
+          )
+      );
+
+      String result = callback.call(input);
+
+      var response = objectMapper.readTree(result);
+
+      // MCP returns the tool result inside a text content block.
+      if (response.isArray() && !response.isEmpty()) {
+        response = objectMapper.readTree(
+            response.get(0).path("text").asText()
+        );
+      }
+
+      String idReadable = response.path("idReadable").asText();
+
+      if (idReadable.isBlank()) {
+        throw new IllegalStateException(
+            "YouTrack did not return a readable issue ID"
+        );
+      }
+
+      String issueUrl = youTrackBaseUrl.replaceAll("/+$", "")
+          + "/issue/" + idReadable;
+
+      return new CreatedIssue(
+          idReadable,
+          response.path("summary").asText(),
+          issueUrl
+      );
+
+    } catch (Exception ex) {
+      log.error("YouTrack issue creation failed.", ex);
+
+      throw new YouTrackUnavailableException(
+          "YouTrack could not create the issue.", ex);
+    }
+  }
+
+
+  private ToolCallback getOrCreateCreateIssueCallback() {
+
+    if (createIssueCallback != null) {
+      return createIssueCallback;
+    }
+
+    try {
+      McpSyncClient activeClient = getOrCreateClient();
+
+      createIssueCallback = Arrays.stream(
+              new SyncMcpToolCallbackProvider(activeClient)
+                  .getToolCallbacks())
+          .filter(tool -> "createYouTrackIssue".equals(
+              tool.getToolDefinition().name()))
+          .findFirst()
+          .orElseThrow(() -> new IllegalStateException(
+              "MCP tool createYouTrackIssue was not registered"));
+
+      return createIssueCallback;
+
+    } catch (Exception ex) {
+      throw new YouTrackUnavailableException(
+          "Could not discover the YouTrack creation tool.", ex);
+    }
+  }
+
+  public record CreatedIssue(
+      String idReadable,
+      String summary,
+      String url
+  ) {
   }
 
   @Override

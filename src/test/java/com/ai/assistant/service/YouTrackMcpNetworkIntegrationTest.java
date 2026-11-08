@@ -14,7 +14,8 @@ import org.springframework.test.context.TestPropertySource;
 @TestPropertySource(properties = {
     "app.integrations.youtrack.url=http://localhost:8090",
     "app.integrations.youtrack.endpoint=/mcp",
-    "app.integrations.youtrack.request-timeout=10s"
+    "app.integrations.youtrack.request-timeout=10s",
+    "app.integrations.youtrack.base-url=https://something"
 })
 class YouTrackMcpNetworkIntegrationTest {
 
@@ -26,13 +27,16 @@ class YouTrackMcpNetworkIntegrationTest {
         @Value("${app.integrations.youtrack.url}") String url,
         @Value("${app.integrations.youtrack.endpoint}") String endpoint,
         @Value("${app.integrations.youtrack.request-timeout}") String timeout,
-        @Value("${app.integrations.youtrack.shared-secret}") String sharedSecret) {
+        @Value("${app.integrations.youtrack.shared-secret}") String sharedSecret,
+        @Value("${app.integrations.youtrack.base-url}")
+        String youTrackBaseUrl) {
 
       return new YouTrackMcpGateway(
           url,
           endpoint,
           java.time.Duration.parse("PT" + timeout.replace("s", "S")),
-          sharedSecret
+          sharedSecret,
+          youTrackBaseUrl
       );
     }
 

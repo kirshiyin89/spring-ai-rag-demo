@@ -1,5 +1,6 @@
 package com.ai.assistant.controller;
 
+import com.ai.assistant.service.AssistantResponse;
 import com.ai.assistant.service.AssistantService;
 import com.ai.assistant.service.VectorStoreService;
 import java.io.IOException;
@@ -28,10 +29,40 @@ public class ChatController {
     @GetMapping("/rag")
     public String rag(
         @RequestParam String conversationId,
-        @RequestParam String question) {
+        @RequestParam String question
+    ) {
+        Object response = assistantService.chat(conversationId, question);
 
-        return assistantService.askWithRag(
-            conversationId,
-            question);
+        if (response instanceof AssistantResponse assistantResponse) {
+            return formatResponse(assistantResponse);
+        }
+
+        return response.toString();
+    }
+
+    private String formatResponse(AssistantResponse response) {
+
+        if (response.type() == AssistantResponse.ResponseType.CLARIFICATION) {
+            return response.message();
+        }
+
+        if (response.type() == AssistantResponse.ResponseType.APPROVAL_REQUIRED
+            && response.draft() != null) {
+
+            return """
+            %s
+
+            **Summary:** %s
+
+            **Description:**
+            %s
+            """.formatted(
+                response.message(),
+                response.draft().summary(),
+                response.draft().description()
+            );
+        }
+
+        return response.message();
     }
 }
