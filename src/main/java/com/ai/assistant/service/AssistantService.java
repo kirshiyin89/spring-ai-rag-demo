@@ -288,11 +288,19 @@ public class AssistantService {
 
     String username = authentication.getName();
 
+    // Persist ticket intent before asking for clarification. A later reply
+    // usually does not mention a ticket, so it must not be routed as general
+    // chat.
+    var collectingDraft = pendingDraftStore.startCollecting(username, conversationId, question);
     String systemPrompt = """
         You are FinFlow's internal IT support assistant.
         
-        Investigate the employee's problem using retrieved internal
-        documentation and the employee's reported information.
+        Prepare a ticket from the employee's reported information.
+
+        Do not answer the employee with documentation or troubleshooting
+        guidance. Your only output must be CLARIFICATION or ISSUE_DRAFT.
+        Employee-reported details are sufficient for a basic support ticket
+        unless an essential detail is genuinely missing.
         
         If essential information is missing, return CLARIFICATION.
         
@@ -322,8 +330,13 @@ public class AssistantService {
     AssistantResponse generated;
 
     try {
-      generated = chatClient.prompt().system(systemPrompt).user(question)
-          .advisors(retrievalAugmentationAdvisor)
+      generated = chatClient.prompt().system(systemPrompt).user("""
+              Current employee message:
+              %s
+
+              Employee-reported details collected before this message:
+              %s
+              """.formatted(question, collectingDraft.draft().description()))
           .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
           .call().entity(AssistantResponse.class);
 
@@ -475,6 +488,18 @@ public class AssistantService {
 
       var draft = pending.get();
 
+      // The employee is answering a ticket clarification. Continue the draft
+      // workflow directly rather than checking for new-ticket wording again.
+      if (draft.status() == PendingIssueDraftStore.Status.COLLECTING) {
+        if (isDraftStatusQuestion(question)) {
+          return new AssistantResponse(AssistantResponse.ResponseType.CLARIFICATION,
+              "No YouTrack ticket has been created yet. This saved draft is still collecting "
+                  + "the information needed to prepare it. Please answer the outstanding "
+                  + "clarification, or provide the missing issue details.", null, null);
+        }
+
+        return prepareIssueDraft(conversationId, question);
+      }
       if (draft.status() == PendingIssueDraftStore.Status.CREATING) {
         return new AssistantResponse(AssistantResponse.ResponseType.APPROVAL_REQUIRED,
             "The ticket is currently being created. " + "Please check YouTrack before retrying.",
@@ -533,6 +558,14 @@ public class AssistantService {
 
     // Preserve existing RAG and ticket-status functionality.
     return askWithRag(conversationId, question);
+  }
+
+  private boolean isDraftStatusQuestion(String question) {
+    String normalized = question.toLowerCase(java.util.Locale.ROOT);
+
+    return normalized.contains("status")
+        && (normalized.contains("ticket") || normalized.contains("issue")
+            || normalized.contains("draft") || normalized.contains("create"));
   }
 
   private boolean isExplicitApproval(String question) {

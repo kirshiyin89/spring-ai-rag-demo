@@ -29,6 +29,9 @@ spring:
       type: pgvector
       pgvector:
         initialize-schema: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
 
 app:
   rag:
