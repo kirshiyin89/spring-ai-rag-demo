@@ -37,6 +37,8 @@ public class YouTrackMcpGateway implements AutoCloseable {
 
   private final String youTrackBaseUrl;
 
+  private ToolCallback searchIssuesCallback;
+
   public YouTrackMcpGateway(
       @Value("${app.integrations.youtrack.url}") String url,
       @Value("${app.integrations.youtrack.endpoint}") String endpoint,
@@ -64,7 +66,10 @@ public class YouTrackMcpGateway implements AutoCloseable {
           + issueId.replace("\\", "\\\\").replace("\"", "\\\"")
           + "\"}";
 
-      return callback.call(input);
+      String result = callback.call(input);
+      log.info("YouTrack issue lookup returned. responseLength={}", result.length());
+      log.debug("YouTrack issue lookup raw response: {}", result);
+      return result;
     } catch (Exception ex) {
       invalidateClient();
 
@@ -212,6 +217,7 @@ public class YouTrackMcpGateway implements AutoCloseable {
   private void invalidateClient() {
     issueCallback = null;
     createIssueCallback = null;
+    searchIssuesCallback = null;
 
     if (client != null) {
       try {
@@ -307,6 +313,66 @@ public class YouTrackMcpGateway implements AutoCloseable {
       String summary,
       String url
   ) {
+
+  }
+
+  public synchronized String searchIssues(
+      String query, int limit, int offset) {
+
+    try {
+      log.info("Calling YouTrack issue search. queryLength={}, limit={}, offset={}",
+          query == null ? 0 : query.length(), limit, offset);
+      log.debug("YouTrack issue search query: {}", query);
+      ToolCallback callback = getOrCreateSearchIssuesCallback();
+
+      String input = objectMapper.writeValueAsString(
+          Map.of(
+              "query", query,
+              "limit", limit,
+              "offset", offset
+          )
+      );
+
+      String result = callback.call(input);
+      log.info("YouTrack issue search returned. responseLength={}", result.length());
+      log.debug("YouTrack issue search raw response: {}", result);
+      return result;
+
+    } catch (Exception ex) {
+      invalidateClient();
+      retryAfter = Instant.now().plus(RETRY_COOLDOWN);
+
+      log.warn("YouTrack issue search failed.", ex);
+
+      throw new YouTrackUnavailableException(
+          "YouTrack could not complete the issue search.", ex);
+    }
+  }
+
+  private ToolCallback getOrCreateSearchIssuesCallback() {
+
+    if (searchIssuesCallback != null) {
+      return searchIssuesCallback;
+    }
+
+    try {
+      McpSyncClient activeClient = getOrCreateClient();
+
+      searchIssuesCallback = Arrays.stream(
+              new SyncMcpToolCallbackProvider(activeClient)
+                  .getToolCallbacks())
+          .filter(tool -> "searchYouTrackIssues".equals(
+              tool.getToolDefinition().name()))
+          .findFirst()
+          .orElseThrow(() -> new IllegalStateException(
+              "MCP tool searchYouTrackIssues was not registered"));
+
+      return searchIssuesCallback;
+
+    } catch (Exception ex) {
+      throw new YouTrackUnavailableException(
+          "Could not discover the YouTrack search tool.", ex);
+    }
   }
 
   @Override

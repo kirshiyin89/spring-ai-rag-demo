@@ -19,37 +19,34 @@ public class ChatController {
     private final AssistantService assistantService;
     private final VectorStoreService vectorStoreService;
 
-
-    @PostMapping(path = "load-vectors")
+    @PostMapping("/load-vectors")
     public String loadVectors() throws IOException {
         vectorStoreService.loadDocuments();
         return "done";
     }
 
+    /**
+     * Handles regular chat, investigation follow-ups, and ticket-draft replies
+     * through one conversation-aware entry point.
+     */
     @GetMapping("/rag")
-    public String rag(
+    public String chat(
         @RequestParam String conversationId,
         @RequestParam String question
     ) {
         Object response = assistantService.chat(conversationId, question);
-
-        if (response instanceof AssistantResponse assistantResponse) {
-            return formatResponse(assistantResponse);
-        }
-
-        return response.toString();
+        return response instanceof AssistantResponse assistantResponse
+            ? formatResponse(assistantResponse)
+            : String.valueOf(response);
     }
 
     private String formatResponse(AssistantResponse response) {
-
-        if (response.type() == AssistantResponse.ResponseType.CLARIFICATION) {
+        if (response.type() != AssistantResponse.ResponseType.APPROVAL_REQUIRED
+            || response.draft() == null) {
             return response.message();
         }
 
-        if (response.type() == AssistantResponse.ResponseType.APPROVAL_REQUIRED
-            && response.draft() != null) {
-
-            return """
+        return """
             %s
 
             **Summary:** %s
@@ -61,8 +58,5 @@ public class ChatController {
                 response.draft().summary(),
                 response.draft().description()
             );
-        }
-
-        return response.message();
     }
 }

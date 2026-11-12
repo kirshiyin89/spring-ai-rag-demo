@@ -56,3 +56,5 @@ logging:
     org.springframework.ai: DEBUG
     org.springframework.web.client: DEBUG
     org.springframework.http.client: DEBUG
+    com.ai.assistant.investigation: DEBUG
+    com.ai.assistant.service.YouTrackMcpGateway: DEBUG

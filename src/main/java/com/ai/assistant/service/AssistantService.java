@@ -1,5 +1,10 @@
 package com.ai.assistant.service;
 
+import com.ai.assistant.investigation.InvestigationOrchestrator;
+import com.ai.assistant.investigation.InvestigationRequest;
+import com.ai.assistant.investigation.InvestigationResult;
+import com.ai.assistant.investigation.InvestigationStatus;
+
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -38,6 +43,7 @@ public class AssistantService {
   private final YouTrackMcpGateway youTrackMcpGateway;
   private final TicketAuthorizationService ticketAuthorizationService;
   private final PendingIssueDraftStore pendingDraftStore;
+  private final InvestigationOrchestrator investigationOrchestrator;
 
   public AssistantService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
@@ -46,7 +52,8 @@ public class AssistantService {
       RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools,
       TicketSourceRouter ticketSourceRouter, YouTrackMcpGateway youTrackMcpGateway,
       TicketAuthorizationService ticketAuthorizationService,
-      PendingIssueDraftStore pendingDraftStore) {
+      PendingIssueDraftStore pendingDraftStore,
+      InvestigationOrchestrator investigationOrchestrator) {
 
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
@@ -59,6 +66,7 @@ public class AssistantService {
     this.youTrackMcpGateway = youTrackMcpGateway;
     this.ticketAuthorizationService = ticketAuthorizationService;
     this.pendingDraftStore = pendingDraftStore;
+    this.investigationOrchestrator = investigationOrchestrator;
 
     this.chatClient = chatClientBuilder.defaultAdvisors(
         MessageChatMemoryAdvisor.builder(chatMemory).build()).build();
@@ -556,8 +564,32 @@ public class AssistantService {
       return prepareIssueDraft(conversationId, question);
     }
 
-    // Preserve existing RAG and ticket-status functionality.
-    return askWithRag(conversationId, question);
+    // General support requests use the conversation-aware investigation workflow.
+    return investigate(conversationId, question);
+  }
+
+  private AssistantResponse investigate(String conversationId, String question) {
+    InvestigationResult result = investigationOrchestrator.investigate(
+        new InvestigationRequest(conversationId, question));
+
+    if (result.status() == InvestigationStatus.NEEDS_CLARIFICATION) {
+      return new AssistantResponse(AssistantResponse.ResponseType.CLARIFICATION,
+          result.clarificationQuestion(), null, null);
+    }
+
+    String suggestedAction = result.escalationReason();
+    if (suggestedAction == null || suggestedAction.isBlank()) {
+      suggestedAction = switch (result.status()) {
+        case INVESTIGATED -> "Follow the documented steps above and let us know if the issue continues.";
+        case ESCALATION_NOT_NEEDED -> "No further action is needed at this time.";
+        case ESCALATION_RECOMMENDED -> "Please contact IT support with the details above.";
+        case NEEDS_CLARIFICATION -> "Please provide the requested detail.";
+      };
+    }
+
+    String message = "Investigation summary:\n" + result.summary()
+        + "\n\nSuggested action:\n" + suggestedAction;
+    return new AssistantResponse(AssistantResponse.ResponseType.ANSWER, message, null, null);
   }
 
   private boolean isDraftStatusQuestion(String question) {
