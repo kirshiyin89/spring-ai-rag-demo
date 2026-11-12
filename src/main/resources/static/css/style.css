@@ -1,0 +1,172 @@
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f3f5f9;
+  color: #1f2937;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.chat-container {
+  width: 100%;
+  max-width: 850px;
+  height: 85vh;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  padding: 20px 25px;
+  background: #1e3a5f;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-header h1 {
+  margin: 0;
+  font-size: 21px;
+}
+
+.chat-header p {
+  margin: 5px 0 0;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.status {
+  font-size: 12px;
+  background: #166534;
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 25px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.message {
+  max-width: 75%;
+  padding: 13px 16px;
+  border-radius: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message.assistant {
+  background: #eef2f7;
+  align-self: flex-start;
+}
+
+.message.user {
+  background: #2563eb;
+  color: white;
+  align-self: flex-end;
+}
+
+.chat-input-container {
+  display: flex;
+  gap: 10px;
+  padding: 18px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.chat-input-container input {
+  flex: 1;
+  padding: 12px 15px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.chat-input-container input:focus {
+  border-color: #2563eb;
+}
+
+.chat-input-container button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 17px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#mic-button {
+  background: #eef2ff;
+  font-size: 19px;
+}
+
+#mic-button.recording {
+  background: #fee2e2;
+  animation: pulse 1.2s infinite;
+}
+
+#send-button {
+  background: #2563eb;
+  color: white;
+}
+
+#send-button:disabled,
+#mic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recording-status {
+  padding: 8px 22px;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+.recording-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #dc2626;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.hidden {
+  display: none;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (max-width: 600px) {
+  .chat-container {
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .message {
+    max-width: 90%;
+  }
+
+  .chat-messages {
+    padding: 15px;
+  }
+}

@@ -50,6 +50,11 @@ app:
     it-admin:
       username: ${IT_ADMIN_USERNAME}
       password: ${IT_ADMIN_PASSWORD}
+  groq:
+    api-key: ${GROQ_API_KEY}
+    voice:
+      transcription:
+        model: whisper-large-v3-turbo
 
 logging:
   level:

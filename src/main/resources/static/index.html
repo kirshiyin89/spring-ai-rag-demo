@@ -1,0 +1,57 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinFlow Assistant</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="chat-container">
+
+  <header class="chat-header">
+    <div>
+      <h1>FinFlow Assistant</h1>
+      <p>Your internal company assistant</p>
+    </div>
+    <span class="status">Online</span>
+  </header>
+
+  <main id="chat-messages" class="chat-messages">
+    <div class="message assistant">
+      Hello! I'm your FinFlow assistant.
+      How can I help you today?
+    </div>
+  </main>
+
+  <div id="recording-status" class="recording-status hidden">
+    <span class="recording-dot"></span>
+    Listening...
+  </div>
+
+  <form id="chat-form" class="chat-input-container">
+
+    <input
+        type="text"
+        id="question-input"
+        placeholder="Ask me anything..."
+        autocomplete="off"
+    >
+
+    <button type="button" id="mic-button" title="Start recording">
+      🎤
+    </button>
+
+    <button type="submit" id="send-button">
+      Send
+    </button>
+
+  </form>
+
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
