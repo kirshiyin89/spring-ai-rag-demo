@@ -1,5 +1,5 @@
 
-const conversationId = "alice";
+const conversationId = crypto.randomUUID();
 
 const chatMessages = document.getElementById("chat-messages");
 const chatForm = document.getElementById("chat-form");

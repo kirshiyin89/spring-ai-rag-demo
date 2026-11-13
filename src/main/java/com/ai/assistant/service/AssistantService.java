@@ -19,7 +19,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.Resource;
-
 import java.util.List;
 
 @Slf4j
@@ -38,6 +37,7 @@ public class AssistantService {
   private final YouTrackMcpGateway youTrackMcpGateway;
   private final TicketAuthorizationService ticketAuthorizationService;
   private final PendingIssueDraftStore pendingDraftStore;
+  private final ConversationalIntentClassifier conversationalIntentClassifier;
 
   public AssistantService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
@@ -46,7 +46,8 @@ public class AssistantService {
       RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools,
       TicketSourceRouter ticketSourceRouter, YouTrackMcpGateway youTrackMcpGateway,
       TicketAuthorizationService ticketAuthorizationService,
-      PendingIssueDraftStore pendingDraftStore) {
+      PendingIssueDraftStore pendingDraftStore,
+      ConversationalIntentClassifier conversationalIntentClassifier) {
 
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
@@ -59,6 +60,7 @@ public class AssistantService {
     this.youTrackMcpGateway = youTrackMcpGateway;
     this.ticketAuthorizationService = ticketAuthorizationService;
     this.pendingDraftStore = pendingDraftStore;
+    this.conversationalIntentClassifier = conversationalIntentClassifier;
 
     this.chatClient = chatClientBuilder.defaultAdvisors(
         MessageChatMemoryAdvisor.builder(chatMemory).build()).build();
@@ -296,7 +298,7 @@ public class AssistantService {
         You are FinFlow's internal IT support assistant.
         
         Prepare a ticket from the employee's reported information.
-
+        
         Do not answer the employee with documentation or troubleshooting
         guidance. Your only output must be CLARIFICATION or ISSUE_DRAFT.
         Employee-reported details are sufficient for a basic support ticket
@@ -333,7 +335,7 @@ public class AssistantService {
       generated = chatClient.prompt().system(systemPrompt).user("""
               Current employee message:
               %s
-
+              
               Employee-reported details collected before this message:
               %s
               """.formatted(question, collectingDraft.draft().description()))
@@ -550,7 +552,14 @@ public class AssistantService {
       };
     }
 
-    // No pending draft: detect new ticket intent.
+    // No pending draft: handle simple conversational messages.
+    var conversationalIntent = conversationalIntentClassifier.classify(question);
+
+    if (conversationalIntent.isPresent()) {
+      return handleConversationalIntent(conversationalIntent.get());
+    }
+
+// Detect new ticket intent.
     if (isTicketRequest(question)) {
       log.info("Ticket request detected: {}", isTicketRequest(question));
       return prepareIssueDraft(conversationId, question);
@@ -565,7 +574,7 @@ public class AssistantService {
 
     return normalized.contains("status")
         && (normalized.contains("ticket") || normalized.contains("issue")
-            || normalized.contains("draft") || normalized.contains("create"));
+        || normalized.contains("draft") || normalized.contains("create"));
   }
 
   private boolean isExplicitApproval(String question) {
@@ -699,6 +708,27 @@ public class AssistantService {
         """).user(question).call().content();
 
     return result != null && result.trim().equalsIgnoreCase("TICKET");
+  }
+
+  private AssistantResponse handleConversationalIntent(
+      ConversationalIntentClassifier.Intent intent) {
+
+    String message = switch (intent) {
+      case GREETING -> "Hello! How can I help you today?";
+
+      case THANKS -> "You're welcome! Happy to help.";
+
+      case FAREWELL -> "Goodbye! Have a great day.";
+
+      case ACKNOWLEDGMENT -> "Got it! Let me know if you need anything else.";
+    };
+
+    return new AssistantResponse(
+        AssistantResponse.ResponseType.ANSWER,
+        message,
+        null,
+        null
+    );
   }
 
 }

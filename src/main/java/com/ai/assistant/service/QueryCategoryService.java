@@ -60,6 +60,33 @@ public class QueryCategoryService {
                 
                 Return exactly one category name, CLARIFY, or NONE.
                 Do not return explanations.
+                
+                conversation
+                
+                CONVERSATION means the employee asks about information
+                they previously shared or something discussed in the
+                current conversation.
+                
+                Examples:
+                
+                Question: What is my name?
+                Answer: CONVERSATION
+                
+                Question: What did I ask you earlier?
+                Answer: CONVERSATION
+                
+                Question: Which operating system did I mention?
+                Answer: CONVERSATION
+                
+                Question: What laptop did I want to request?
+                Answer: CONVERSATION
+                
+                Question: How do I request a laptop?
+                Answer: hardware
+                
+                Question: Considering what I told you, how do I request
+                a laptop?
+                Answer: hardware
                 """)
             .user(question)
             .call()
