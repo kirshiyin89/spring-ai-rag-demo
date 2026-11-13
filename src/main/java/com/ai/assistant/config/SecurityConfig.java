@@ -3,6 +3,7 @@ package com.ai.assistant.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -51,6 +52,12 @@ public class SecurityConfig {
                 "/index.html",
                 "/app.js",
                 "/styles.css"
+            ).authenticated()
+
+            // Image analysis endpoint.
+            .requestMatchers(
+                HttpMethod.POST,
+                "/api/images/analyze"
             ).authenticated()
 
             // Only ADMIN can load vector documents.

@@ -31,6 +31,17 @@
     Listening...
   </div>
 
+  <div id="image-preview" class="image-preview hidden">
+    <img id="image-preview-img" alt="Selected screenshot">
+
+    <div class="image-preview-info">
+      <span id="image-preview-name"></span>
+      <button type="button" id="remove-image-button">
+        Remove
+      </button>
+    </div>
+  </div>
+
   <form id="chat-form" class="chat-input-container">
 
     <input
@@ -39,7 +50,18 @@
         placeholder="Ask me anything..."
         autocomplete="off"
     >
+    <button
+        type="button"
+        id="image-button"
+        title="Attach an error screenshot">
+      📎
+    </button>
 
+    <input
+        type="file"
+        id="image-input"
+        accept="image/png,image/jpeg"
+        hidden>
     <button type="button" id="mic-button" title="Start recording">
       🎤
     </button>

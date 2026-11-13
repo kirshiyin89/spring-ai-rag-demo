@@ -31,6 +31,161 @@ async function csrfHeaders() {
   };
 }
 
+const imageButton = document.getElementById("image-button");
+const imageInput = document.getElementById("image-input");
+
+const imagePreview = document.getElementById("image-preview");
+const imagePreviewImg = document.getElementById("image-preview-img");
+const imagePreviewName = document.getElementById("image-preview-name");
+
+const removeImageButton =
+    document.getElementById("remove-image-button");
+
+let selectedImage = null;
+let previewObjectUrl = null;
+
+function clearImageSelection() {
+  selectedImage = null;
+
+  imageInput.value = "";
+  imagePreview.classList.add("hidden");
+
+  imagePreviewImg.removeAttribute("src");
+  imagePreviewName.textContent = "";
+
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = null;
+  }
+}
+
+function handleImageSelection(file) {
+  if (!file) {
+    return;
+  }
+
+  const allowedTypes = ["image/png", "image/jpeg"];
+  const maxSize = 5 * 1024 * 1024;
+
+  if (!allowedTypes.includes(file.type)) {
+    alert("Only PNG and JPEG images are supported.");
+    imageInput.value = "";
+    return;
+  }
+
+  if (file.size > maxSize) {
+    alert("Image size must not exceed 5 MB.");
+    imageInput.value = "";
+    return;
+  }
+
+  clearImageSelection();
+
+  selectedImage = file;
+
+  previewObjectUrl = URL.createObjectURL(file);
+
+  imagePreviewImg.src = previewObjectUrl;
+  imagePreviewName.textContent = file.name;
+
+  imagePreview.classList.remove("hidden");
+}
+
+imageButton.addEventListener("click", () => {
+  if (!isProcessing) {
+    imageInput.click();
+  }
+});
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files[0];
+
+  handleImageSelection(file);
+});
+
+removeImageButton.addEventListener("click", () => {
+  clearImageSelection();
+});
+
+async function sendImageQuestion(question) {
+
+  if (!selectedImage || isProcessing) {
+    return;
+  }
+
+  const imageFile = selectedImage;
+
+  const userMessage = addMessage(
+      question.trim() || "Please analyze this error screenshot.",
+      "user"
+  );
+
+  const messageImage = document.createElement("img");
+
+  const messageImageUrl = URL.createObjectURL(imageFile);
+
+  messageImage.src = messageImageUrl;
+  messageImage.alt = "Uploaded error screenshot";
+  messageImage.className = "chat-image-preview";
+
+  messageImage.onload = () => {
+    URL.revokeObjectURL(messageImageUrl);
+  };
+
+  userMessage.appendChild(messageImage);
+
+  questionInput.value = "";
+
+  clearImageSelection();
+
+  setProcessing(true);
+
+  const loadingMessage = addMessage(
+      "Analyzing your screenshot...",
+      "assistant"
+  );
+
+  try {
+    const formData = new FormData();
+
+    formData.append("image", imageFile);
+
+    if (question.trim()) {
+      formData.append("question", question);
+    }
+
+    const headers = await csrfHeaders();
+
+    const response = await fetch("/api/images/analyze", {
+      method: "POST",
+      headers: headers,
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+
+      throw new Error(
+          errorMessage || "Image analysis failed."
+      );
+    }
+
+    const answer = await response.text();
+
+    loadingMessage.textContent = answer;
+
+  } catch (error) {
+    console.error("Image analysis error:", error);
+
+    loadingMessage.textContent =
+        "Sorry, I couldn't analyze the screenshot. " +
+        "Please try again.";
+
+  } finally {
+    setProcessing(false);
+  }
+}
+
 // Display a message in the chat window.
 function addMessage(text, sender) {
   const message = document.createElement("div");
@@ -205,20 +360,27 @@ micButton.addEventListener("click", async () => {
   }
 });
 
-// Handle typed questions.
+// Handle typed questions and image uploads.
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  await sendTextQuestion(questionInput.value);
+  if (selectedImage) {
+    await sendImageQuestion(questionInput.value);
+  } else {
+    await sendTextQuestion(questionInput.value);
+  }
 });
 
-// Disable controls while processing.
 function setProcessing(processing) {
   isProcessing = processing;
 
   sendButton.disabled = processing;
   micButton.disabled = processing;
   questionInput.disabled = processing;
+
+  imageButton.disabled = processing;
+  imageInput.disabled = processing;
+  removeImageButton.disabled = processing;
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

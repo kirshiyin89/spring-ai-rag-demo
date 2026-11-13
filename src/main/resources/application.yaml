@@ -55,6 +55,13 @@ app:
     voice:
       transcription:
         model: whisper-large-v3-turbo
+  image-analysis:
+    model: qwen/qwen3.8-27b
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 logging:
   level:

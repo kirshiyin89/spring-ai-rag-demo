@@ -203,3 +203,46 @@ body {
     padding: 15px;
   }
 }
+
+.image-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+}
+
+.image-preview img {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.image-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.image-preview-info span {
+  overflow-wrap: anywhere;
+}
+
+.image-preview button {
+  cursor: pointer;
+}
+
+.chat-image-preview {
+  display: block;
+  max-width: 220px;
+  max-height: 180px;
+  object-fit: contain;
+  margin-top: 10px;
+  border-radius: 8px;
+}
+
+.hidden {
+  display: none !important;
+}
