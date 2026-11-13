@@ -4,7 +4,9 @@ import com.ai.assistant.service.AssistantResponse;
 import com.ai.assistant.service.AssistantService;
 import com.ai.assistant.service.VectorStoreService;
 import java.io.IOException;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -64,5 +66,13 @@ public class ChatController {
         }
 
         return response.message();
+    }
+
+    @GetMapping("/csrf")
+    public Map<String, String> csrf(CsrfToken csrfToken) {
+        return Map.of(
+            "token", csrfToken.getToken(),
+            "headerName", csrfToken.getHeaderName()
+        );
     }
 }

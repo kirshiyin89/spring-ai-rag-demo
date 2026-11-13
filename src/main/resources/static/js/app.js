@@ -13,6 +13,24 @@ let audioChunks = [];
 let isRecording = false;
 let isProcessing = false;
 
+async function getCsrfToken() {
+  const response = await fetch("/api/chat/csrf");
+
+  if (!response.ok) {
+    throw new Error("Could not retrieve CSRF token");
+  }
+
+  return await response.json();
+}
+
+async function csrfHeaders() {
+  const csrf = await getCsrfToken();
+
+  return {
+    [csrf.headerName]: csrf.token
+  };
+}
+
 // Display a message in the chat window.
 function addMessage(text, sender) {
   const message = document.createElement("div");
@@ -76,8 +94,11 @@ async function sendVoiceQuestion(audioBlob) {
 
     formData.append("audio", audioBlob, "recording.webm");
 
+    const headers = await csrfHeaders();
+
     const response = await fetch("/api/voice/transcribe", {
       method: "POST",
+      headers,
       body: formData
     });
 
@@ -199,3 +220,16 @@ function setProcessing(processing) {
   micButton.disabled = processing;
   questionInput.disabled = processing;
 }
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const csrfInput = document.getElementById("csrfToken");
+
+  if (!csrfInput) return;
+
+  try {
+    const csrf = await getCsrfToken();
+    csrfInput.value = csrf.token;
+  } catch (error) {
+    console.error("Failed to initialize CSRF token:", error);
+  }
+});

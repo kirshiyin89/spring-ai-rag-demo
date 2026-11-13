@@ -13,52 +13,100 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
 public class SecurityConfig {
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http) {
+  SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
     return http
-        .csrf(AbstractHttpConfigurer::disable)
+        // Enable CSRF protection using a cookie-based token.
+        .csrf(csrf -> csrf
+            .csrfTokenRepository(
+                CookieCsrfTokenRepository.withHttpOnlyFalse()
+            )
+            .csrfTokenRequestHandler(
+                new CsrfTokenRequestAttributeHandler()
+            )
+        )
+
+        // Create an HTTP session when authentication succeeds.
         .sessionManagement(session -> session
-            .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+        )
+
         .authorizeHttpRequests(auth -> auth
+
+            // Public endpoints.
+            .requestMatchers(
+                "/login",
+                "/error"
+            ).permitAll()
+
+            // Protect the chatbot frontend.
+            .requestMatchers(
+                "/index.html",
+                "/app.js",
+                "/styles.css"
+            ).authenticated()
+
+            // Only ADMIN can load vector documents.
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
                 "/api/chat/load-vectors"
             ).hasRole("ADMIN")
+
+            // Only IT_ADMIN can approve ticket changes.
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
                 "/api/tickets/changes/*/approve"
             ).hasRole("IT_ADMIN")
+
+            // Ticket review endpoints.
             .requestMatchers(
                 org.springframework.http.HttpMethod.GET,
                 "/api/youtrack/workflow",
                 "/api/youtrack/review-prompt",
                 "/api/youtrack/review"
             ).hasAnyRole("IT_SUPPORT", "IT_ADMIN", "ADMIN")
+
+            // Issue draft creation.
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
                 "/api/chat/issue-draft"
             ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
+
+            // Approve or cancel issue drafts.
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
                 "/api/chat/issue-draft/*/approve",
                 "/api/chat/issue-draft/*/cancel"
             ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
 
+            // Update issue drafts.
             .requestMatchers(
                 org.springframework.http.HttpMethod.PUT,
                 "/api/chat/issue-draft/*"
             ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
-            .anyRequest().permitAll()
+
+            // All remaining endpoints require authentication.
+            .anyRequest().authenticated()
         )
 
-        .httpBasic(Customizer.withDefaults())
+        // Enable form-based login.
+        .formLogin(form -> form
+            .defaultSuccessUrl("/", true)
+        )
+
+        // Enable session-based logout.
+        .logout(Customizer.withDefaults())
+
         .build();
   }
+
 
   @Bean
   UserDetailsService userDetailsService(

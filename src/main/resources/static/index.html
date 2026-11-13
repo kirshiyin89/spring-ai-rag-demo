@@ -50,6 +50,15 @@
 
   </form>
 
+  <form action="/logout" method="post" id="logoutForm">
+    <input type="hidden" name="_csrf" id="csrfToken">
+
+    <button type="submit" class="logout-button">
+      <span class="logout-icon">↪</span>
+      <span>Sign out</span>
+    </button>
+  </form>
+
 </div>
 
 <script src="/js/app.js"></script>

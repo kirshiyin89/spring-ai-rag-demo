@@ -150,6 +150,39 @@ body {
   display: none;
 }
 
+/* Logout button */
+.logout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 9px 16px;
+
+  background: transparent;
+  color: #64748b;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+
+  font-size: 13px;
+  font-weight: 500;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.logout-button:hover {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #e11d48;
+}
+
+.logout-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.5;
