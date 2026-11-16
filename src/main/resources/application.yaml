@@ -50,6 +50,9 @@ app:
     it-admin:
       username: ${IT_ADMIN_USERNAME}
       password: ${IT_ADMIN_PASSWORD}
+    brewly:
+      username: ${BREWLY_USERNAME}
+      password: ${BREWLY_PASSWORD}
   groq:
     api-key: ${GROQ_API_KEY}
     voice:
@@ -62,6 +65,10 @@ app:
     multipart:
       max-file-size: 5MB
       max-request-size: 6MB
+
+  tenancy:
+    finflow-users: "${DB_USERNAME},${IT_SUPPORT_USERNAME},${IT_ADMIN_USERNAME}"
+    brewly-user: ${BREWLY_USERNAME}
 
 logging:
   level:

@@ -1,5 +1,6 @@
 package com.ai.assistant.service;
 
+import com.ai.assistant.persistence.Tenant;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -16,6 +17,7 @@ import org.springframework.ai.rag.Query;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -40,6 +42,7 @@ public class AssistantService {
   private final TicketAuthorizationService ticketAuthorizationService;
   private final PendingIssueDraftStore pendingDraftStore;
   private final ConversationalIntentClassifier conversationalIntentClassifier;
+  private final TenantService tenantService;
 
   public AssistantService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
       @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
@@ -49,7 +52,7 @@ public class AssistantService {
       TicketSourceRouter ticketSourceRouter, YouTrackMcpGateway youTrackMcpGateway,
       TicketAuthorizationService ticketAuthorizationService,
       PendingIssueDraftStore pendingDraftStore,
-      ConversationalIntentClassifier conversationalIntentClassifier) {
+      ConversationalIntentClassifier conversationalIntentClassifier, TenantService tenantService) {
 
     this.chatMemory = chatMemory;
     this.queryCategoryService = queryCategoryService;
@@ -63,6 +66,7 @@ public class AssistantService {
     this.ticketAuthorizationService = ticketAuthorizationService;
     this.pendingDraftStore = pendingDraftStore;
     this.conversationalIntentClassifier = conversationalIntentClassifier;
+    this.tenantService = tenantService;
 
     this.chatClient = chatClientBuilder.defaultAdvisors(
         MessageChatMemoryAdvisor.builder(chatMemory).build()).build();
@@ -72,8 +76,21 @@ public class AssistantService {
 
 
   public String askWithRag(String conversationId, String question) {
-    List<Message> history = chatMemory.get(conversationId);
+    String username = requireCurrentUsername();
+    Tenant tenant = tenantService.resolveForUsername(username);
 
+    return askWithRag(conversationId, question, tenant);
+  }
+
+  public String askWithRag(
+      String conversationId,
+      String question,
+      Tenant tenant
+  ) {
+    String memoryConversationId =
+        tenantScopedConversationId(conversationId, tenant);
+
+    List<Message> history = chatMemory.get(memoryConversationId);
     log.info("History messages: {}", history.size());
     log.info("Original question: {}", question);
 
@@ -132,9 +149,20 @@ public class AssistantService {
       promptSpec.tools(ticketTools);
     }
 
-    return promptSpec.advisors(retrievalAugmentationAdvisor)
-        .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
-        .call().content();
+    var tenantFilter = new FilterExpressionBuilder()
+        .eq("tenantId", tenant.getId())
+        .build();
+
+    return promptSpec
+        .advisors(retrievalAugmentationAdvisor)
+        .advisors(advisorSpec -> advisorSpec
+            .param(ChatMemory.CONVERSATION_ID, memoryConversationId)
+            .param(
+                org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever.FILTER_EXPRESSION,
+                tenantFilter
+            ))
+        .call()
+        .content();
   }
 
   private String retrieveTicketContext(String question) {
@@ -288,7 +316,8 @@ public class AssistantService {
   }
 
 
-  public AssistantResponse prepareIssueDraft(String conversationId, String question) {
+  public AssistantResponse prepareIssueDraft(String conversationId, String question,
+      Tenant tenant) {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
     if (authentication == null || !authentication.isAuthenticated()) {
@@ -337,7 +366,10 @@ public class AssistantService {
         Return the response using the AssistantResponse structure.
         """;
 
-    String conversationContext = chatMemory.get(conversationId).stream()
+    String memoryConversationId =
+        tenantScopedConversationId(conversationId, tenant);
+
+    String conversationContext = chatMemory.get(memoryConversationId).stream()
         .map(message -> message.getMessageType() + ": " + message.getText())
         .collect(java.util.stream.Collectors.joining("\n\n"));
 
@@ -496,6 +528,18 @@ public class AssistantService {
   }
 
   public Object chat(String conversationId, String question) {
+    Tenant tenant = tenantService.resolveForUsername(
+        requireCurrentUsername()
+    );
+
+    return chat(conversationId, question, tenant);
+  }
+
+  public Object chat(
+      String conversationId,
+      String question,
+      Tenant tenant
+  ) {
 
     String username = requireCurrentUsername();
 
@@ -526,7 +570,7 @@ public class AssistantService {
                   + "clarification, or provide the missing issue details.", null, null);
         }
 
-        return prepareIssueDraft(conversationId, question);
+        return prepareIssueDraft(conversationId, question, tenant);
       }
       if (draft.status() == PendingIssueDraftStore.Status.CREATING) {
         return new AssistantResponse(AssistantResponse.ResponseType.APPROVAL_REQUIRED,
@@ -588,11 +632,11 @@ public class AssistantService {
 // Detect new ticket intent.
     if (isTicketRequest(question)) {
       log.info("Ticket request detected: {}", isTicketRequest(question));
-      return prepareIssueDraft(conversationId, question);
+      return prepareIssueDraft(conversationId, question, tenant);
     }
 
     // Preserve existing RAG and ticket-status functionality.
-    return askWithRag(conversationId, question);
+    return askWithRag(conversationId, question, tenant);
   }
 
   private boolean isDraftStatusQuestion(String question) {
@@ -760,7 +804,8 @@ public class AssistantService {
   public void rememberImageAnalysis(
       String conversationId,
       String question,
-      String analysis
+      String analysis,
+      Tenant tenant
   ) {
     String userMessage = (question == null || question.isBlank())
         ? "The employee uploaded a screenshot for analysis."
@@ -772,8 +817,11 @@ public class AssistantService {
         %s
         """.formatted(analysis);
 
+    String memoryConversationId =
+        tenantScopedConversationId(conversationId, tenant);
+
     chatMemory.add(
-        conversationId,
+        memoryConversationId,
         List.of(
             new UserMessage(userMessage),
             new AssistantMessage(assistantMessage)
@@ -781,6 +829,25 @@ public class AssistantService {
     );
 
     log.info("Image analysis added to conversation memory: {}", conversationId);
+  }
+
+  private String tenantScopedConversationId(
+      String conversationId,
+      Tenant tenant
+  ) {
+    if (tenant == null || tenant.getId() == null) {
+      throw new IllegalArgumentException(
+          "A valid tenant is required for conversation memory"
+      );
+    }
+
+    if (conversationId == null || conversationId.isBlank()) {
+      throw new IllegalArgumentException(
+          "Conversation ID cannot be empty"
+      );
+    }
+
+    return "tenant-" + tenant.getId() + ":" + conversationId;
   }
 
 }

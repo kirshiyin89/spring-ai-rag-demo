@@ -64,7 +64,7 @@ public class SecurityConfig {
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
                 "/api/chat/load-vectors"
-            ).hasRole("ADMIN")
+            ).hasAnyRole("IT_ADMIN", "USER", "ADMIN")
 
             // Only IT_ADMIN can approve ticket changes.
             .requestMatchers(
@@ -102,7 +102,7 @@ public class SecurityConfig {
             .requestMatchers(
                 org.springframework.http.HttpMethod.GET,
                 "/api/chat/rag"
-            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN", "ADMIN")
+            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN", "ADMIN", "USER")
 
             // All remaining endpoints require authentication.
             .anyRequest().authenticated()
@@ -131,7 +131,9 @@ public class SecurityConfig {
       @Value("${app.security.it-support.password}") String itSupportPassword,
       @Value("${app.security.it-admin.username}") String itAdminUsername,
       @Value("${app.security.it-admin.password}") String itAdminPassword,
-      PasswordEncoder passwordEncoder) {
+      PasswordEncoder passwordEncoder,
+      @Value("${app.security.brewly.username}") String brewlyUsername,
+      @Value("${app.security.brewly.password}") String brewlyPassword) {
 
     var dbAdmin = User.withUsername(dbUsername)
         .password(passwordEncoder.encode(dbPassword))
@@ -148,7 +150,12 @@ public class SecurityConfig {
         .roles("IT_ADMIN")
         .build();
 
-    return new InMemoryUserDetailsManager(dbAdmin, itSupport, itAdmin);
+    var brewlyUser = User.withUsername(brewlyUsername)
+        .password(passwordEncoder.encode(brewlyPassword))
+        .roles("USER")
+        .build();
+
+    return new InMemoryUserDetailsManager(dbAdmin, itSupport, itAdmin, brewlyUser);
   }
 
   @Bean

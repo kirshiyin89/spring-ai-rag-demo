@@ -1,10 +1,13 @@
 package com.ai.assistant.controller;
 
+import com.ai.assistant.persistence.Tenant;
 import com.ai.assistant.service.AssistantResponse;
 import com.ai.assistant.service.AssistantService;
 import com.ai.assistant.service.SpeechToTextService;
+import com.ai.assistant.service.TenantService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class VoiceController {
 
     private final SpeechToTextService speechToTextService;
+    private final TenantService tenantService;
 
     @PostMapping(
         value = "/transcribe",
@@ -28,18 +32,26 @@ public class VoiceController {
 
     private final AssistantService assistantService;
 
-
     @PostMapping(
         value = "/chat",
         consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public VoiceChatResponse chat(
         @RequestParam String conversationId,
-        @RequestPart("audio") MultipartFile audio) {
-
+        @RequestPart("audio") MultipartFile audio,
+        Authentication authentication
+    ) {
         String question = speechToTextService.transcribe(audio);
 
-        Object result = assistantService.chat(conversationId, question);
+        Tenant tenant = tenantService.resolveForUsername(
+            authentication.getName()
+        );
+
+        Object result = assistantService.chat(
+            conversationId,
+            question,
+            tenant
+        );
 
         String answer = result instanceof AssistantResponse assistantResponse
             ? formatResponse(assistantResponse)
