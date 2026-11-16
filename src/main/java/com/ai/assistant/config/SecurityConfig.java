@@ -99,6 +99,11 @@ public class SecurityConfig {
                 "/api/chat/issue-draft/*"
             ).hasAnyRole("IT_SUPPORT", "IT_ADMIN")
 
+            .requestMatchers(
+                org.springframework.http.HttpMethod.GET,
+                "/api/chat/rag"
+            ).hasAnyRole("IT_SUPPORT", "IT_ADMIN", "ADMIN")
+
             // All remaining endpoints require authentication.
             .anyRequest().authenticated()
         )

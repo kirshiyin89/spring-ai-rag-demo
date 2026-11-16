@@ -103,6 +103,12 @@ public class AssistantService {
       return generateClarification(question);
     }
 
+    if ("NONE".equalsIgnoreCase(category)) {
+      return "I can help with FinFlow company documentation, "
+          + "employee onboarding, internal IT support, and YouTrack tickets. "
+          + "I can't answer general knowledge questions.";
+    }
+
     String systemPrompt = new PromptTemplate(systemPromptResource).render();
 
     String userMessage = standaloneQuestion;
