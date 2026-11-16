@@ -113,6 +113,9 @@ public class SecurityConfig {
             .defaultSuccessUrl("/", true)
         )
 
+        // Support HTTP Basic authentication for API clients such as curl.
+        .httpBasic(Customizer.withDefaults())
+
         // Enable session-based logout.
         .logout(Customizer.withDefaults())
 
