@@ -107,6 +107,7 @@ removeImageButton.addEventListener("click", () => {
   clearImageSelection();
 });
 
+
 async function sendImageQuestion(question) {
 
   if (!selectedImage || isProcessing) {
@@ -121,7 +122,6 @@ async function sendImageQuestion(question) {
   );
 
   const messageImage = document.createElement("img");
-
   const messageImageUrl = URL.createObjectURL(imageFile);
 
   messageImage.src = messageImageUrl;
@@ -149,6 +149,7 @@ async function sendImageQuestion(question) {
     const formData = new FormData();
 
     formData.append("image", imageFile);
+    formData.append("conversationId", conversationId);
 
     if (question.trim()) {
       formData.append("question", question);
@@ -164,27 +165,23 @@ async function sendImageQuestion(question) {
 
     if (!response.ok) {
       const errorMessage = await response.text();
-
-      throw new Error(
-          errorMessage || "Image analysis failed."
-      );
+      throw new Error(errorMessage || "Image analysis failed.");
     }
 
     const answer = await response.text();
-
     loadingMessage.textContent = answer;
 
   } catch (error) {
     console.error("Image analysis error:", error);
 
     loadingMessage.textContent =
-        "Sorry, I couldn't analyze the screenshot. " +
-        "Please try again.";
+        "Sorry, I couldn't analyze the screenshot. Please try again.";
 
   } finally {
     setProcessing(false);
   }
 }
+
 
 // Display a message in the chat window.
 function addMessage(text, sender) {

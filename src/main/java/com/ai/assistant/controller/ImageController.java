@@ -1,5 +1,6 @@
 package com.ai.assistant.controller;
 
+import com.ai.assistant.service.AssistantService;
 import com.ai.assistant.service.ImageAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +19,14 @@ public class ImageController {
 
     private final ImageAnalysisService imageAnalysisService;
 
+    private final AssistantService assistantService;
+
+
     @PostMapping(
         value = "/analyze",
         consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    public ResponseEntity<String> analyzeImage(
+    public ResponseEntity<String> analyzeImage(@RequestParam String conversationId,
         @RequestPart("image") MultipartFile image,
         @RequestParam(required = false) String question) {
 
@@ -46,13 +50,19 @@ public class ImageController {
         }
 
         try {
-            String result = imageAnalysisService.analyzeImage(
+            String analysis = imageAnalysisService.analyzeImage(
                 image.getBytes(),
                 contentType,
                 question
             );
 
-            return ResponseEntity.ok(result);
+            assistantService.rememberImageAnalysis(
+                conversationId,
+                question,
+                analysis
+            );
+
+            return ResponseEntity.ok(analysis);
 
         } catch (Exception ex) {
             log.error("Image analysis failed", ex);

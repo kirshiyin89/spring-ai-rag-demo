@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.rag.Query;
 import org.springframework.ai.chat.messages.Message;
@@ -329,19 +331,37 @@ public class AssistantService {
         Return the response using the AssistantResponse structure.
         """;
 
+    String conversationContext = chatMemory.get(conversationId).stream()
+        .map(message -> message.getMessageType() + ": " + message.getText())
+        .collect(java.util.stream.Collectors.joining("\n\n"));
+
     AssistantResponse generated;
 
     try {
-      generated = chatClient.prompt().system(systemPrompt).user("""
+      generated = clarificationClient.prompt()
+          .system(systemPrompt)
+          .user("""
+              Previous conversation context, including screenshot analysis:
+              
+              %s
+              
               Current employee message:
               %s
               
               Employee-reported details collected before this message:
               %s
-              """.formatted(question, collectingDraft.draft().description()))
-          .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
-          .call().entity(AssistantResponse.class);
-
+              
+              Use the previous conversation context when preparing the issue.
+              Include relevant error messages from screenshot analysis.
+              Clearly distinguish observed errors from possible causes.
+              Do not ask the employee to repeat information already available.
+              """.formatted(
+              conversationContext,
+              question,
+              collectingDraft.draft().description()
+          ))
+          .call()
+          .entity(AssistantResponse.class);
     } catch (Exception ex) {
       log.error("Issue draft generation failed", ex);
 
@@ -729,6 +749,32 @@ public class AssistantService {
         null,
         null
     );
+  }
+
+  public void rememberImageAnalysis(
+      String conversationId,
+      String question,
+      String analysis
+  ) {
+    String userMessage = (question == null || question.isBlank())
+        ? "The employee uploaded a screenshot for analysis."
+        : "The employee uploaded a screenshot and asked: " + question;
+
+    String assistantMessage = """
+        Screenshot analysis (AI-generated, not independently verified):
+        
+        %s
+        """.formatted(analysis);
+
+    chatMemory.add(
+        conversationId,
+        List.of(
+            new UserMessage(userMessage),
+            new AssistantMessage(assistantMessage)
+        )
+    );
+
+    log.info("Image analysis added to conversation memory: {}", conversationId);
   }
 
 }
