@@ -22,6 +22,7 @@ public class PendingIssueDraftStore {
      */
     @Transactional
     public PendingDraft startCollecting(
+        Long tenantId,
         String username,
         String conversationId,
         String employeeMessage
@@ -29,7 +30,7 @@ public class PendingIssueDraftStore {
         Instant now = Instant.now();
 
         PendingIssueDraftEntity entity = repository
-            .findByUsernameAndConversationId(username, conversationId)
+            .findByTenantIdAndUsernameAndConversationId(tenantId, username, conversationId)
             .orElseGet(PendingIssueDraftEntity::new);
 
         if (entity.getDraftId() != null && entity.getStatus() != Status.COLLECTING) {
@@ -46,6 +47,7 @@ public class PendingIssueDraftStore {
                 + employeeMessage);
         }
 
+        entity.setTenantId(tenantId);
         entity.setUsername(username);
         entity.setConversationId(conversationId);
         entity.setStatus(Status.COLLECTING);
@@ -56,6 +58,7 @@ public class PendingIssueDraftStore {
 
     @Transactional
     public PendingDraft save(
+        Long tenantId,
         String username,
         String conversationId,
         AssistantResponse.IssueDraft draft
@@ -63,7 +66,8 @@ public class PendingIssueDraftStore {
         Instant now = Instant.now();
 
         PendingIssueDraftEntity entity =
-            repository.findByUsernameAndConversationId(
+            repository.findByTenantIdAndUsernameAndConversationId(
+                tenantId,
                 username,
                 conversationId
             ).orElseGet(PendingIssueDraftEntity::new);
@@ -72,6 +76,7 @@ public class PendingIssueDraftStore {
             entity.setDraftId(UUID.randomUUID());
             entity.setCreatedAt(now);
         }
+        entity.setTenantId(tenantId);
         entity.setUsername(username);
         entity.setConversationId(conversationId);
         entity.setSummary(draft.summary());
@@ -84,11 +89,13 @@ public class PendingIssueDraftStore {
     }
 
     public Optional<PendingDraft> get(
+        Long tenantId,
         String username,
         String conversationId
     ) {
         return repository
-            .findByUsernameAndConversationId(
+            .findByTenantIdAndUsernameAndConversationId(
+                tenantId,
                 username,
                 conversationId
             )
@@ -97,6 +104,7 @@ public class PendingIssueDraftStore {
 
     @Transactional
     public Optional<PendingDraft> claim(
+        Long tenantId,
         String username,
         String conversationId,
         String draftId
@@ -111,6 +119,7 @@ public class PendingIssueDraftStore {
 
         int updated = repository.claimDraft(
             id,
+            tenantId,
             username,
             conversationId,
             Status.PENDING,
@@ -121,18 +130,20 @@ public class PendingIssueDraftStore {
             return Optional.empty();
         }
 
-        return get(username, conversationId);
+        return get(tenantId, username, conversationId);
     }
 
     @Transactional
     public boolean update(
+        Long tenantId,
         String username,
         String conversationId,
         String draftId,
         AssistantResponse.IssueDraft updatedDraft
     ) {
         Optional<PendingIssueDraftEntity> optionalEntity =
-            repository.findByUsernameAndConversationId(
+            repository.findByTenantIdAndUsernameAndConversationId(
+                tenantId,
                 username,
                 conversationId
             );
@@ -159,11 +170,13 @@ public class PendingIssueDraftStore {
 
     @Transactional
     public boolean cancel(
+        Long tenantId,
         String username,
         String conversationId,
         String draftId
     ) {
         return deleteDraft(
+            tenantId,
             username,
             conversationId,
             draftId,
@@ -173,11 +186,13 @@ public class PendingIssueDraftStore {
 
     @Transactional
     public boolean complete(
+        Long tenantId,
         String username,
         String conversationId,
         String draftId
     ) {
         return deleteDraft(
+            tenantId,
             username,
             conversationId,
             draftId,
@@ -187,6 +202,7 @@ public class PendingIssueDraftStore {
 
     @Transactional
     public void remove(
+        Long tenantId,
         String username,
         String conversationId,
         String draftId
@@ -194,8 +210,9 @@ public class PendingIssueDraftStore {
         try {
             UUID id = UUID.fromString(draftId);
 
-            repository.deleteByDraftIdAndUsernameAndConversationIdAndStatus(
+            repository.deleteByDraftIdAndTenantIdAndUsernameAndConversationIdAndStatus(
                 id,
+                    tenantId,
                 username,
                 conversationId,
                 Status.PENDING
@@ -206,6 +223,7 @@ public class PendingIssueDraftStore {
     }
 
     private boolean deleteDraft(
+        Long tenantId,
         String username,
         String conversationId,
         String draftId,
@@ -215,8 +233,9 @@ public class PendingIssueDraftStore {
             UUID id = UUID.fromString(draftId);
 
             return repository
-                .deleteByDraftIdAndUsernameAndConversationIdAndStatus(
+                .deleteByDraftIdAndTenantIdAndUsernameAndConversationIdAndStatus(
                     id,
+                    tenantId,
                     username,
                     conversationId,
                     status

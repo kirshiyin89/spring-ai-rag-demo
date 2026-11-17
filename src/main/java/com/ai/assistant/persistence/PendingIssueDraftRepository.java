@@ -12,7 +12,7 @@ public interface PendingIssueDraftRepository
     extends JpaRepository<PendingIssueDraftEntity, UUID> {
 
     Optional<PendingIssueDraftEntity>
-        findByUsernameAndConversationId(
+        findByTenantIdAndUsernameAndConversationId(Long tenantId,
             String username,
             String conversationId
         );
@@ -22,18 +22,20 @@ public interface PendingIssueDraftRepository
     UPDATE PendingIssueDraftEntity d
     SET d.status = :creating
     WHERE d.draftId = :draftId
+      AND d.tenantId = :tenantId
       AND d.username = :username
       AND d.conversationId = :conversationId
       AND d.status = :pending
     """)
     int claimDraft(
         UUID draftId,
+        Long tenantId,
         String username,
         String conversationId,
         Status pending,
         Status creating
     );
 
-    int deleteByDraftIdAndUsernameAndConversationIdAndStatus(UUID id, String username, String conversationId, Status status);
+    int deleteByDraftIdAndTenantIdAndUsernameAndConversationIdAndStatus(UUID id, Long tenantId, String username, String conversationId, Status status);
 
 }

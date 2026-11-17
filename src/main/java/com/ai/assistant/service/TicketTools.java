@@ -1,22 +1,34 @@
 package com.ai.assistant.service;
 
 import java.util.Locale;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.security.core.Authentication;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class TicketTools {
 
   private final TicketService ticketService;
   private final TicketAuthorizationService authorizationService;
   private final TicketStatusChangeService statusChangeService;
+  private final TenantService tenantService;
+
+  public TicketTools(TicketService ticketService, TicketAuthorizationService authorizationService, TicketStatusChangeService statusChangeService) {
+    this(ticketService, authorizationService, statusChangeService, null);
+  }
+
+  @Autowired
+  public TicketTools(TicketService ticketService, TicketAuthorizationService authorizationService, TicketStatusChangeService statusChangeService, TenantService tenantService) {
+    this.ticketService = ticketService;
+    this.authorizationService = authorizationService;
+    this.statusChangeService = statusChangeService;
+    this.tenantService = tenantService;
+  }
 
   @Tool(
       name = "getTicketStatus",
@@ -43,11 +55,18 @@ public class TicketTools {
         SecurityContextHolder.getContext().getAuthentication();
 
     if (!authorizationService.canReadTickets(authentication)) {
+      return "ACCESS_DENIED: You do not have permission to view IT support tickets.";
+    }
+
+    var tenant = resolveFinflowTenant(authentication);
+    if (tenantService != null && tenant == null) {
       return "ACCESS_DENIED: You do not have permission "
           + "to view IT support tickets.";
     }
 
-    return ticketService.findTicket(normalizedTicketId)
+    return (tenantService == null
+        ? ticketService.findTicket(normalizedTicketId)
+        : ticketService.findTicket(normalizedTicketId, tenant.getId()))
         .map(ticket ->
             "TICKET_FOUND: Ticket " + ticket.ticketId()
                 + ": Status = " + ticket.status()
@@ -92,11 +111,13 @@ public class TicketTools {
 
       try {
         assert authentication != null;
-        var request = statusChangeService.requestChange(
-            ticketId,
-            requestedStatus,
-            authentication.getName()
-        );
+        var tenant = resolveFinflowTenant(authentication);
+        if (tenantService != null && tenant == null) {
+          return "ACCESS_DENIED: Ticket workflows are restricted to FinFlow users.";
+        }
+        var request = tenantService == null
+            ? statusChangeService.requestChange(ticketId, requestedStatus, authentication.getName())
+            : statusChangeService.requestChange(ticketId, requestedStatus, authentication.getName(), tenant.getId());
 
         return "APPROVAL_REQUIRED: Request ID = "
             + request.requestId()
@@ -124,5 +145,17 @@ public class TicketTools {
     }
   }
 
+
+  private com.ai.assistant.persistence.Tenant resolveFinflowTenant(Authentication authentication) {
+    if (tenantService == null || authentication == null) {
+      return null;
+    }
+    try {
+      var tenant = tenantService.resolveForUsername(authentication.getName());
+      return "finflow".equals(tenant.getSlug()) ? tenant : null;
+    } catch (org.springframework.security.access.AccessDeniedException ex) {
+      return null;
+    }
+  }
 
 }

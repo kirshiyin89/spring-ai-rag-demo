@@ -64,7 +64,7 @@ public class SecurityConfig {
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
                 "/api/chat/load-vectors"
-            ).hasAnyRole("IT_ADMIN", "USER", "ADMIN")
+            ).hasAnyRole("IT_ADMIN", "ADMIN")
 
             // Only IT_ADMIN can approve ticket changes.
             .requestMatchers(

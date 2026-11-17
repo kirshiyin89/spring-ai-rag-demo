@@ -113,7 +113,10 @@ public class AssistantService {
       standaloneQuestion = compressionQueryTransformer.transform(queryWithHistory).text();
     }
 
-    String category = queryCategoryService.classify(standaloneQuestion);
+    String category = queryCategoryService.classify(
+        standaloneQuestion,
+        tenant
+    );
     log.info("Classified category: {}", category);
 
     if ("CLARIFY".equalsIgnoreCase(category) && ticketContext.isBlank()) {
@@ -121,13 +124,38 @@ public class AssistantService {
     }
 
     if ("NONE".equalsIgnoreCase(category)) {
-      return "I can help with FinFlow company documentation, "
-          + "employee onboarding, internal IT support, and YouTrack tickets. "
-          + "I can't answer general knowledge questions.";
+      return switch (tenant.getSlug()) {
+        case "brewly" ->
+            "I'm here to help with coffee, brewing methods, "
+                + "coffee beans, and coffee equipment. "
+                + "I can't help with that topic.";
+
+        case "finflow" ->
+            "I can help with FinFlow company documentation, "
+                + "employee onboarding, internal IT support, and YouTrack tickets. "
+                + "I can't answer general knowledge questions.";
+
+        default -> throw new IllegalArgumentException(
+            "Unsupported tenant: " + tenant.getSlug()
+        );
+      };
     }
 
-    String systemPrompt = new PromptTemplate(systemPromptResource).render();
+    String systemPrompt = tenant.getSystemPrompt();
 
+    if (systemPrompt == null || systemPrompt.isBlank()) {
+      log.info(
+          "No tenant-specific system prompt found for {}. Using default prompt.",
+          tenant.getSlug()
+      );
+
+      systemPrompt = new PromptTemplate(systemPromptResource).render();
+    } else {
+      log.info(
+          "Using tenant-specific system prompt for {}",
+          tenant.getSlug()
+      );
+    }
     String userMessage = standaloneQuestion;
 
     if (!ticketContext.isBlank()) {
@@ -318,6 +346,7 @@ public class AssistantService {
 
   public AssistantResponse prepareIssueDraft(String conversationId, String question,
       Tenant tenant) {
+    requireFinflowTicketWorkflow(tenant);
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
     if (authentication == null || !authentication.isAuthenticated()) {
@@ -330,7 +359,7 @@ public class AssistantService {
     // Persist ticket intent before asking for clarification. A later reply
     // usually does not mention a ticket, so it must not be routed as general
     // chat.
-    var collectingDraft = pendingDraftStore.startCollecting(username, conversationId, question);
+    var collectingDraft = pendingDraftStore.startCollecting(tenant.getId(), username, conversationId, question);
     String systemPrompt = """
         You are FinFlow's internal IT support assistant.
         
@@ -426,7 +455,7 @@ public class AssistantService {
               : generated.message(), null, null);
     }
 
-    var pending = pendingDraftStore.save(username, conversationId, generated.draft());
+    var pending = pendingDraftStore.save(tenant.getId(), username, conversationId, generated.draft());
 
     return new AssistantResponse(AssistantResponse.ResponseType.APPROVAL_REQUIRED,
         "Review the proposed issue below. No ticket has been created. " + "Draft ID: "
@@ -434,10 +463,11 @@ public class AssistantService {
   }
 
 
-  public AssistantResponse approveIssueDraft(String conversationId, String draftId) {
+  public AssistantResponse approveIssueDraft(String conversationId, String draftId, Tenant tenant) {
+    requireFinflowTicketWorkflow(tenant);
     String username = requireCurrentUsername();
 
-    var claimed = pendingDraftStore.claim(username, conversationId, draftId);
+    var claimed = pendingDraftStore.claim(tenant.getId(), username, conversationId, draftId);
 
     if (claimed.isEmpty()) {
       return new AssistantResponse(AssistantResponse.ResponseType.ANSWER,
@@ -451,7 +481,7 @@ public class AssistantService {
       var createdIssue = youTrackMcpGateway.createIssue(pending.draft().summary(),
           pending.draft().description());
 
-      pendingDraftStore.complete(username, conversationId, draftId);
+      pendingDraftStore.complete(tenant.getId(), username, conversationId, draftId);
 
       return new AssistantResponse(AssistantResponse.ResponseType.ISSUE_CREATED,
           "Your YouTrack issue was created successfully: " + "[" + createdIssue.idReadable() + "]("
@@ -468,10 +498,11 @@ public class AssistantService {
   }
 
 
-  public AssistantResponse cancelIssueDraft(String conversationId, String draftId) {
+  public AssistantResponse cancelIssueDraft(String conversationId, String draftId, Tenant tenant) {
+    requireFinflowTicketWorkflow(tenant);
     String username = requireCurrentUsername();
 
-    var pending = pendingDraftStore.get(username, conversationId);
+    var pending = pendingDraftStore.get(tenant.getId(), username, conversationId);
 
     if (pending.isEmpty() || !pending.get().draftId().equals(draftId)
         || pending.get().status() != PendingIssueDraftStore.Status.PENDING) {
@@ -480,7 +511,7 @@ public class AssistantService {
           "The draft is missing or already being processed.", null, null);
     }
 
-    boolean cancelled = pendingDraftStore.cancel(username, conversationId, draftId);
+    boolean cancelled = pendingDraftStore.cancel(tenant.getId(), username, conversationId, draftId);
 
     if (!cancelled) {
       return new AssistantResponse(AssistantResponse.ResponseType.ANSWER,
@@ -493,7 +524,7 @@ public class AssistantService {
   }
 
 
-  public AssistantResponse editIssueDraft(String conversationId, String draftId,
+  public AssistantResponse editIssueDraft(String conversationId, String draftId, Tenant tenant,
       AssistantResponse.IssueDraft updatedDraft) {
     String username = requireCurrentUsername();
 
@@ -504,7 +535,7 @@ public class AssistantService {
           "The issue summary and description cannot be blank.", null, null);
     }
 
-    var updated = pendingDraftStore.update(username, conversationId, draftId, updatedDraft);
+    var updated = pendingDraftStore.update(tenant.getId(), username, conversationId, draftId, updatedDraft);
 
     if (!updated) {
       return new AssistantResponse(AssistantResponse.ResponseType.ANSWER,
@@ -549,7 +580,7 @@ public class AssistantService {
         conversationId
     );
 
-    var pending = pendingDraftStore.get(username, conversationId);
+    var pending = pendingDraftStore.get(tenant.getId(), username, conversationId);
 
     log.info("Chat request: conversationId={}, question={}", conversationId, question);
 
@@ -580,7 +611,7 @@ public class AssistantService {
 
       // Handle unambiguous approvals without another LLM call.
       if (isExplicitApproval(question)) {
-        return approveIssueDraft(conversationId, draft.draftId());
+        return approveIssueDraft(conversationId, draft.draftId(), tenant);
       }
 
       var action = interpretDraftResponse(
@@ -590,9 +621,9 @@ public class AssistantService {
 
       return switch (action.action()) {
 
-        case APPROVE -> approveIssueDraft(conversationId, draft.draftId());
+        case APPROVE -> approveIssueDraft(conversationId, draft.draftId(), tenant);
 
-        case CANCEL -> cancelIssueDraft(conversationId, draft.draftId());
+        case CANCEL -> cancelIssueDraft(conversationId, draft.draftId(), tenant);
 
         case EDIT -> {
 
@@ -606,7 +637,7 @@ public class AssistantService {
                 "I couldn't update the draft. " + "Please describe the changes.");
           }
 
-          yield editIssueDraft(conversationId, draft.draftId(), updatedDraft);
+          yield editIssueDraft(conversationId, draft.draftId(), tenant, updatedDraft);
         }
 
         case ASK_QUESTION, KEEP_PENDING -> {
@@ -631,6 +662,10 @@ public class AssistantService {
 
 // Detect new ticket intent.
     if (isTicketRequest(question)) {
+      if (!"finflow".equals(tenant.getSlug())) {
+        return new AssistantResponse(AssistantResponse.ResponseType.ANSWER,
+            "Ticket workflows are restricted to FinFlow users.", null, null);
+      }
       log.info("Ticket request detected: {}", isTicketRequest(question));
       return prepareIssueDraft(conversationId, question, tenant);
     }
@@ -829,6 +864,13 @@ public class AssistantService {
     );
 
     log.info("Image analysis added to conversation memory: {}", conversationId);
+  }
+
+  private void requireFinflowTicketWorkflow(Tenant tenant) {
+    if (tenant == null || !"finflow".equals(tenant.getSlug())) {
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Ticket workflows are restricted to FinFlow users.");
+    }
   }
 
   private String tenantScopedConversationId(

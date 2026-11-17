@@ -12,7 +12,6 @@ import org.springframework.ai.rag.preretrieval.query.expansion.QueryExpander;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
-import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,23 +35,6 @@ public class AiConfig {
   @Value("${app.rag.similarity-threshold}")
   private double similarityThreshold;
 
-
-  @Bean
-  RewriteQueryTransformer rewriteQueryTransformer(
-      ChatClient.Builder builder) {
-
-    return RewriteQueryTransformer.builder()
-        .chatClientBuilder(builder.clone())
-        .targetSearchSystem("""
-            An internal company documentation vector store
-            containing FinFlow onboarding, IT access, hardware,
-            software, network, HR, and deployment procedures.
-            Rewrite the input as a clear, standalone search query.
-            Preserve the user's intent and important details.
-            Do not answer the question.
-            """)
-        .build();
-  }
 
   @Bean
   CompressionQueryTransformer compressionQueryTransformer(

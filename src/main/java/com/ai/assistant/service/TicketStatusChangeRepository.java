@@ -15,6 +15,17 @@ public class TicketStatusChangeRepository {
         this.jdbcClient = jdbcClient;
     }
 
+    public void save(PendingTicketChange request, Long tenantId) {
+        jdbcClient.sql("""
+                INSERT INTO ticket_status_change_requests (request_id, ticket_id, tenant_id, requested_status, requested_by, created_at, state)
+                VALUES (:requestId, :ticketId, :tenantId, :requestedStatus, :requestedBy, :createdAt, :state)
+                """)
+            .param("requestId", request.requestId()).param("ticketId", request.ticketId())
+            .param("tenantId", tenantId).param("requestedStatus", request.requestedStatus())
+            .param("requestedBy", request.requestedBy()).param("createdAt", java.sql.Timestamp.from(request.createdAt()))
+            .param("state", request.state()).update();
+    }
+
     public void save(PendingTicketChange request) {
         jdbcClient.sql("""
                 INSERT INTO ticket_status_change_requests (
@@ -46,6 +57,17 @@ public class TicketStatusChangeRepository {
             .update();
     }
 
+    public boolean existsPendingRequest(String ticketId, String requestedStatus, Long tenantId) {
+        Integer count = jdbcClient.sql("""
+            SELECT COUNT(*) FROM ticket_status_change_requests
+            WHERE ticket_id = :ticketId AND tenant_id = :tenantId
+              AND requested_status = :requestedStatus
+              AND state IN ('PENDING_APPROVAL', 'APPROVING')
+            """).param("ticketId", ticketId).param("tenantId", tenantId)
+            .param("requestedStatus", requestedStatus).query(Integer.class).single();
+        return count > 0;
+    }
+
     public boolean existsPendingRequest(String ticketId, String requestedStatus) {
         Integer count = jdbcClient.sql("""
             SELECT COUNT(*)
@@ -60,6 +82,15 @@ public class TicketStatusChangeRepository {
             .single();
 
         return count > 0;
+    }
+
+    public Optional<PendingTicketChange> findById(UUID requestId, Long tenantId) {
+        return jdbcClient.sql("""
+                SELECT request_id, ticket_id, requested_status, requested_by, created_at, state
+                FROM ticket_status_change_requests
+                WHERE request_id = :requestId AND tenant_id = :tenantId
+                """).param("requestId", requestId).param("tenantId", tenantId)
+            .query((rs, rowNum) -> new PendingTicketChange(rs.getObject("request_id", UUID.class), rs.getString("ticket_id"), rs.getString("requested_status"), rs.getString("requested_by"), rs.getTimestamp("created_at").toInstant(), rs.getString("state"))).optional();
     }
 
     public Optional<PendingTicketChange> findById(UUID requestId) {
@@ -81,6 +112,11 @@ public class TicketStatusChangeRepository {
             .optional();
     }
 
+    public boolean updateState(UUID requestId, String state, Long tenantId) {
+        int updatedRows = jdbcClient.sql("UPDATE ticket_status_change_requests SET state = :state WHERE request_id = :requestId AND tenant_id = :tenantId").param("state", state).param("requestId", requestId).param("tenantId", tenantId).update();
+        return updatedRows == 1;
+    }
+
     public boolean updateState(UUID requestId, String state) {
         int updatedRows = jdbcClient.sql("""
                 UPDATE ticket_status_change_requests
@@ -91,6 +127,11 @@ public class TicketStatusChangeRepository {
             .param("requestId", requestId)
             .update();
 
+        return updatedRows == 1;
+    }
+
+    public boolean claimForApproval(UUID requestId, Long tenantId) {
+        int updatedRows = jdbcClient.sql("UPDATE ticket_status_change_requests SET state = 'APPROVING' WHERE request_id = :requestId AND tenant_id = :tenantId AND state = 'PENDING_APPROVAL'").param("requestId", requestId).param("tenantId", tenantId).update();
         return updatedRows == 1;
     }
 

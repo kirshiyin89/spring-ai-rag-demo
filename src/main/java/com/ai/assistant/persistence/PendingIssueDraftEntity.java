@@ -27,6 +27,9 @@ public class PendingIssueDraftEntity {
     @Id
     private UUID draftId;
 
+    @Column(name = "tenant_id", nullable = false)
+    private Long tenantId;
+
     @Column(nullable = false)
     private String username;
 
