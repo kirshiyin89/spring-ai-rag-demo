@@ -4,10 +4,7 @@ import com.ai.assistant.persistence.Tenant;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -66,7 +63,7 @@ public class VectorStoreService {
         );
       }
 
-      String contentHash = calculateHash(content);
+      String contentHash = ContentHash.sha256(content);
       Long tenantId = tenant.getId();
 
       // Remove legacy FinFlow chunks that predate tenant metadata.
@@ -82,16 +79,18 @@ public class VectorStoreService {
         );
       }
 
-      // Check the content hash within the current tenant only.
+      // Check the content hash within the current tenant and source only.
       List<String> storedHashes = jdbcTemplate.query(
           """
           SELECT DISTINCT COALESCE(metadata->>'contentHash', '')
           FROM vector_store
           WHERE metadata->>'tenantId' = ?
+            AND metadata->>'source' = ?
             AND metadata->>'filename' = ?
           """,
           (rs, rowNum) -> rs.getString(1),
           tenantId.toString(),
+          getSource(tenant),
           filename
       );
 
@@ -116,9 +115,11 @@ public class VectorStoreService {
             """
             DELETE FROM vector_store
             WHERE metadata->>'tenantId' = ?
+              AND metadata->>'source' = ?
               AND metadata->>'filename' = ?
             """,
             tenantId.toString(),
+            getSource(tenant),
             filename
         );
 
@@ -259,21 +260,5 @@ public class VectorStoreService {
     }
 
     return metadata;
-  }
-
-  private String calculateHash(String content) {
-
-    try {
-      byte[] hash = MessageDigest.getInstance("SHA-256")
-          .digest(content.getBytes(StandardCharsets.UTF_8));
-
-      return HexFormat.of().formatHex(hash);
-
-    } catch (NoSuchAlgorithmException exception) {
-      throw new IllegalStateException(
-          "SHA-256 algorithm is unavailable",
-          exception
-      );
-    }
   }
 }

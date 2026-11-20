@@ -66,6 +66,12 @@ public class SecurityConfig {
                 "/api/chat/load-vectors"
             ).hasAnyRole("IT_ADMIN", "ADMIN")
 
+            // Only ADMIN can crawl the Brewly website.
+            .requestMatchers(
+                org.springframework.http.HttpMethod.POST,
+                "/api/chat/crawl"
+            ).hasAnyRole("IT_ADMIN", "ADMIN")
+
             // Only IT_ADMIN can approve ticket changes.
             .requestMatchers(
                 org.springframework.http.HttpMethod.POST,
@@ -110,7 +116,12 @@ public class SecurityConfig {
 
         // Enable form-based login.
         .formLogin(form -> form
-            .defaultSuccessUrl("/", true)
+            .successHandler((request, response, authentication) ->
+                // Brewly customers (ROLE_USER) get the Brewly page; everyone else gets the FinFlow page.
+                response.sendRedirect(authentication.getAuthorities().stream()
+                        .anyMatch(authority -> "ROLE_USER".equals(authority.getAuthority()))
+                    ? "/brewly.html"
+                    : "/"))
         )
 
         // Support HTTP Basic authentication for API clients such as curl.

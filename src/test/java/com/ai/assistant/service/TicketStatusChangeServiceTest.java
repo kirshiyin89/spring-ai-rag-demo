@@ -72,6 +72,27 @@ class TicketStatusChangeServiceTest {
           return true;
         });
 
+    when(repository.updateState(any(UUID.class), anyString()))
+        .thenAnswer(invocation -> {
+          UUID requestId = invocation.getArgument(0);
+          String state = invocation.getArgument(1);
+          PendingTicketChange request = storedRequests.get(requestId);
+
+          if (request == null) {
+            return false;
+          }
+
+          storedRequests.put(requestId, new PendingTicketChange(
+              request.requestId(),
+              request.ticketId(),
+              request.requestedStatus(),
+              request.requestedBy(),
+              request.createdAt(),
+              state));
+
+          return true;
+        });
+
     service = new TicketStatusChangeService(ticketService, repository);
   }
 
@@ -185,7 +206,7 @@ class TicketStatusChangeServiceTest {
     PendingTicketChange updated =
         service.findPendingChange(request.requestId());
 
-    assertEquals("APPROVING", updated.state());
+    assertEquals("APPROVED", updated.state());
 
     verify(ticketService).updateTicketStatus("IT-1042", "CLOSED");
   }

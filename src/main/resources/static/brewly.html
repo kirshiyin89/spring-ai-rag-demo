@@ -1,0 +1,88 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brewly Coffee Assistant</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="chat-container">
+
+  <header class="chat-header">
+    <div>
+      <h1>Brewly Coffee Assistant</h1>
+      <p>Ask about coffee, brewing, beans, shipping and returns</p>
+    </div>
+    <span class="status">Online</span>
+  </header>
+
+  <main id="chat-messages" class="chat-messages">
+    <div class="message assistant">
+      Hello! I'm the Brewly assistant.
+      How can I help you today?
+    </div>
+  </main>
+
+  <div id="recording-status" class="recording-status hidden">
+    <span class="recording-dot"></span>
+    Listening...
+  </div>
+
+  <div id="image-preview" class="image-preview hidden">
+    <img id="image-preview-img" alt="Selected screenshot">
+
+    <div class="image-preview-info">
+      <span id="image-preview-name"></span>
+      <button type="button" id="remove-image-button">
+        Remove
+      </button>
+    </div>
+  </div>
+
+  <form id="chat-form" class="chat-input-container">
+
+    <input
+        type="text"
+        id="question-input"
+        placeholder="Ask me anything..."
+        autocomplete="off"
+    >
+    <button
+        type="button"
+        id="image-button"
+        title="Attach an error screenshot">
+      📎
+    </button>
+
+    <input
+        type="file"
+        id="image-input"
+        accept="image/png,image/jpeg"
+        hidden>
+    <button type="button" id="mic-button" title="Start recording">
+      🎤
+    </button>
+
+    <button type="submit" id="send-button">
+      Send
+    </button>
+
+  </form>
+
+  <form action="/logout" method="post" id="logoutForm">
+    <input type="hidden" name="_csrf" id="csrfToken">
+
+    <button type="submit" class="logout-button">
+      <span class="logout-icon">↪</span>
+      <span>Sign out</span>
+    </button>
+  </form>
+
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>

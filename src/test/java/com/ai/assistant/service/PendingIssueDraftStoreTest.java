@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -20,6 +21,8 @@ import org.junit.jupiter.api.Test;
 
 class PendingIssueDraftStoreTest {
 
+  private static final Long TENANT_ID = 1L;
+
   private final Map<String, PendingIssueDraftEntity> drafts = new HashMap<>();
   private PendingIssueDraftStore store;
 
@@ -28,22 +31,24 @@ class PendingIssueDraftStoreTest {
     drafts.clear();
     PendingIssueDraftRepository repository = mock(PendingIssueDraftRepository.class);
 
-    when(repository.findByUsernameAndConversationId(anyString(), anyString()))
+    when(repository.findByTenantIdAndUsernameAndConversationId(
+        anyLong(), anyString(), anyString()))
         .thenAnswer(invocation -> Optional.ofNullable(drafts.get(key(
-            invocation.getArgument(0), invocation.getArgument(1)))));
+            invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)))));
     when(repository.save(any(PendingIssueDraftEntity.class)))
         .thenAnswer(invocation -> {
           PendingIssueDraftEntity entity = invocation.getArgument(0);
-          drafts.put(key(entity.getUsername(), entity.getConversationId()), entity);
+          drafts.put(key(entity.getTenantId(), entity.getUsername(),
+              entity.getConversationId()), entity);
           return entity;
         });
-    when(repository.claimDraft(any(UUID.class), anyString(), anyString(),
+    when(repository.claimDraft(any(UUID.class), anyLong(), anyString(), anyString(),
         eq(PendingIssueDraftStore.Status.PENDING),
         eq(PendingIssueDraftStore.Status.CREATING)))
         .thenAnswer(invocation -> {
           UUID draftId = invocation.getArgument(0);
           PendingIssueDraftEntity entity = drafts.get(key(
-              invocation.getArgument(1), invocation.getArgument(2)));
+              invocation.getArgument(1), invocation.getArgument(2), invocation.getArgument(3)));
 
           if (entity == null || !draftId.equals(entity.getDraftId())
               || entity.getStatus() != PendingIssueDraftStore.Status.PENDING) {
@@ -53,21 +58,23 @@ class PendingIssueDraftStoreTest {
           entity.setStatus(PendingIssueDraftStore.Status.CREATING);
           return 1;
         });
-    when(repository.deleteByDraftIdAndUsernameAndConversationIdAndStatus(
-        any(UUID.class), anyString(), anyString(), any(PendingIssueDraftStore.Status.class)))
+    when(repository.deleteByDraftIdAndTenantIdAndUsernameAndConversationIdAndStatus(
+        any(UUID.class), anyLong(), anyString(), anyString(),
+        any(PendingIssueDraftStore.Status.class)))
         .thenAnswer(invocation -> {
           UUID draftId = invocation.getArgument(0);
-          String username = invocation.getArgument(1);
-          String conversationId = invocation.getArgument(2);
-          PendingIssueDraftStore.Status status = invocation.getArgument(3);
-          PendingIssueDraftEntity entity = drafts.get(key(username, conversationId));
+          Long tenantId = invocation.getArgument(1);
+          String username = invocation.getArgument(2);
+          String conversationId = invocation.getArgument(3);
+          PendingIssueDraftStore.Status status = invocation.getArgument(4);
+          PendingIssueDraftEntity entity = drafts.get(key(tenantId, username, conversationId));
 
           if (entity == null || !draftId.equals(entity.getDraftId())
               || entity.getStatus() != status) {
             return 0;
           }
 
-          drafts.remove(key(username, conversationId));
+          drafts.remove(key(tenantId, username, conversationId));
           return 1;
         });
 
@@ -76,8 +83,9 @@ class PendingIssueDraftStoreTest {
 
   @Test
   void startCollectingPersistsContextAndSavePromotesTheSameDraft() {
-    var collecting = store.startCollecting("alice", "conversation-1", "My laptop is locked.");
-    var saved = store.save("alice", "conversation-1",
+    var collecting = store.startCollecting(TENANT_ID, "alice", "conversation-1",
+        "My laptop is locked.");
+    var saved = store.save(TENANT_ID, "alice", "conversation-1",
         new AssistantResponse.IssueDraft("Laptop access issue", "User cannot access laptop."));
 
     assertEquals(PendingIssueDraftStore.Status.COLLECTING, collecting.status());
@@ -90,31 +98,33 @@ class PendingIssueDraftStoreTest {
 
   @Test
   void claimAndCompleteRemoveOnlyTheClaimedPendingDraft() {
-    var draft = store.save("alice", "conversation-1",
+    var draft = store.save(TENANT_ID, "alice", "conversation-1",
         new AssistantResponse.IssueDraft("VPN problem", "VPN disconnects."));
 
-    var claimed = store.claim("alice", "conversation-1", draft.draftId());
+    var claimed = store.claim(TENANT_ID, "alice", "conversation-1", draft.draftId());
 
     assertTrue(claimed.isPresent());
     assertEquals(PendingIssueDraftStore.Status.CREATING, claimed.get().status());
-    assertTrue(store.complete("alice", "conversation-1", draft.draftId()));
-    assertTrue(store.get("alice", "conversation-1").isEmpty());
+    assertTrue(store.complete(TENANT_ID, "alice", "conversation-1", draft.draftId()));
+    assertTrue(store.get(TENANT_ID, "alice", "conversation-1").isEmpty());
   }
 
   @Test
   void cannotClaimOrDeleteWithTheWrongDraftId() {
-    var draft = store.save("alice", "conversation-1",
+    var draft = store.save(TENANT_ID, "alice", "conversation-1",
         new AssistantResponse.IssueDraft("VPN problem", "VPN disconnects."));
 
-    assertTrue(store.claim("alice", "conversation-1", UUID.randomUUID().toString()).isEmpty());
-    assertFalse(store.cancel("alice", "conversation-1", UUID.randomUUID().toString()));
-    assertTrue(store.get("alice", "conversation-1").isPresent());
+    assertTrue(store.claim(TENANT_ID, "alice", "conversation-1",
+        UUID.randomUUID().toString()).isEmpty());
+    assertFalse(store.cancel(TENANT_ID, "alice", "conversation-1",
+        UUID.randomUUID().toString()));
+    assertTrue(store.get(TENANT_ID, "alice", "conversation-1").isPresent());
     assertEquals(PendingIssueDraftStore.Status.PENDING,
-        store.get("alice", "conversation-1").orElseThrow().status());
-    assertTrue(store.cancel("alice", "conversation-1", draft.draftId()));
+        store.get(TENANT_ID, "alice", "conversation-1").orElseThrow().status());
+    assertTrue(store.cancel(TENANT_ID, "alice", "conversation-1", draft.draftId()));
   }
 
-  private String key(String username, String conversationId) {
-    return username + ':' + conversationId;
+  private String key(Long tenantId, String username, String conversationId) {
+    return tenantId + ":" + username + ':' + conversationId;
   }
 }

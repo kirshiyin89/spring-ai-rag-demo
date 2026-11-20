@@ -3,13 +3,20 @@ package com.ai.assistant.controller;
 import com.ai.assistant.persistence.Tenant;
 import com.ai.assistant.service.AssistantResponse;
 import com.ai.assistant.service.AssistantService;
+import com.ai.assistant.service.CrawlAlreadyRunningException;
+import com.ai.assistant.service.CrawlIngestionService;
+import com.ai.assistant.service.CrawlIngestionService.CrawlSummary;
+import com.ai.assistant.service.CrawlSiteUnavailableException;
 import com.ai.assistant.service.TenantService;
 import com.ai.assistant.service.VectorStoreService;
 import java.io.IOException;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,7 +31,28 @@ public class ChatController {
   private final AssistantService assistantService;
   private final VectorStoreService vectorStoreService;
   private final TenantService tenantService;
+  private final CrawlIngestionService crawlIngestionService;
 
+
+  // The crawl always targets the Brewly tenant. The URL and tenant come from
+  // configuration, not from the request.
+  @PostMapping(path = "crawl")
+  public CrawlSummary crawlBrewlyWebsite() {
+
+    Tenant brewly = tenantService.resolveBySlug(CrawlIngestionService.BREWLY_SLUG);
+
+    return crawlIngestionService.crawlBrewly(brewly);
+  }
+
+  @ExceptionHandler(CrawlSiteUnavailableException.class)
+  public ResponseEntity<String> siteUnavailable(CrawlSiteUnavailableException exception) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(exception.getMessage());
+  }
+
+  @ExceptionHandler(CrawlAlreadyRunningException.class)
+  public ResponseEntity<String> crawlAlreadyRunning(CrawlAlreadyRunningException exception) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.getMessage());
+  }
 
   @PostMapping(path = "load-vectors")
   public String loadVectors(Authentication authentication) throws IOException {

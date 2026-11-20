@@ -94,8 +94,11 @@ public class AssistantService {
     log.info("History messages: {}", history.size());
     log.info("Original question: {}", question);
 
+    // Ticket lookups are FinFlow-only. Other tenants never reach ticket data.
+    boolean ticketsEnabled = ticketsEnabled(tenant);
+
     // Check authorization before retrieving ticket information.
-    if (ticketSourceRouter.route(question).isPresent()) {
+    if (ticketsEnabled && ticketSourceRouter.route(question).isPresent()) {
       Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
       if (!ticketAuthorizationService.canReadTickets(authentication)) {
@@ -103,7 +106,7 @@ public class AssistantService {
       }
     }
 
-    String ticketContext = retrieveTicketContext(question);
+    String ticketContext = ticketsEnabled ? retrieveTicketContext(question) : "";
 
     String standaloneQuestion = question;
 
@@ -173,7 +176,7 @@ public class AssistantService {
 
 // Ticket IDs have already been handled by Java routing.
 // Don't let the model attempt a second lookup using the wrong source.
-    if (ticketSourceRouter.route(question).isEmpty()) {
+    if (ticketsEnabled && ticketSourceRouter.route(question).isEmpty()) {
       promptSpec.tools(ticketTools);
     }
 
@@ -191,6 +194,10 @@ public class AssistantService {
             ))
         .call()
         .content();
+  }
+
+  private boolean ticketsEnabled(Tenant tenant) {
+    return tenant != null && "finflow".equals(tenant.getSlug());
   }
 
   private String retrieveTicketContext(String question) {

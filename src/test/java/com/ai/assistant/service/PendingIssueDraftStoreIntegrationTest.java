@@ -20,6 +20,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class PendingIssueDraftStoreIntegrationTest {
 
+  private static final Long TENANT_ID = 1L;
+
   @Container
   static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
       .withDatabaseName("drafts")
@@ -46,23 +48,24 @@ class PendingIssueDraftStoreIntegrationTest {
 
   @Test
   void draftSurvivesAStoreReconstructionAndCompletesItsLifecycle() {
-    var collecting = store.startCollecting("alice", "conversation-1", "Laptop access fails.");
-    var pending = store.save("alice", "conversation-1",
+    var collecting = store.startCollecting(TENANT_ID, "alice", "conversation-1",
+        "Laptop access fails.");
+    var pending = store.save(TENANT_ID, "alice", "conversation-1",
         new AssistantResponse.IssueDraft("Cannot access laptop", "Laptop access fails after login."));
 
     var restartedStore = new PendingIssueDraftStore(repository);
-    var restored = restartedStore.get("alice", "conversation-1");
+    var restored = restartedStore.get(TENANT_ID, "alice", "conversation-1");
 
     assertTrue(restored.isPresent());
     assertEquals(collecting.draftId(), restored.orElseThrow().draftId());
     assertEquals(PendingIssueDraftStore.Status.PENDING, restored.orElseThrow().status());
     assertEquals("Cannot access laptop", restored.orElseThrow().draft().summary());
 
-    var claimed = restartedStore.claim("alice", "conversation-1", pending.draftId());
+    var claimed = restartedStore.claim(TENANT_ID, "alice", "conversation-1", pending.draftId());
 
     assertTrue(claimed.isPresent());
     assertEquals(PendingIssueDraftStore.Status.CREATING, claimed.orElseThrow().status());
-    assertTrue(restartedStore.complete("alice", "conversation-1", pending.draftId()));
-    assertTrue(restartedStore.get("alice", "conversation-1").isEmpty());
+    assertTrue(restartedStore.complete(TENANT_ID, "alice", "conversation-1", pending.draftId()));
+    assertTrue(restartedStore.get(TENANT_ID, "alice", "conversation-1").isEmpty());
   }
 }

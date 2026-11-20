@@ -33,6 +33,14 @@ public class TenantService {
     }
 
     @Transactional(readOnly = true)
+    public Tenant resolveBySlug(String slug) {
+        return tenantRepository.findBySlugAndActiveTrue(slug)
+            .orElseThrow(() -> new IllegalStateException(
+                "Tenant is unavailable: " + slug
+            ));
+    }
+
+    @Transactional(readOnly = true)
     public Tenant resolveForUsername(String username) {
 
         if (username == null || username.isBlank()) {

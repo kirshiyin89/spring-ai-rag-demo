@@ -36,6 +36,7 @@ public class QueryCategoryService {
             Classify the user's question using these categories:
 
             COFFEE
+            SHOP
             CONVERSATION
             CLARIFY
             NONE
@@ -52,14 +53,21 @@ public class QueryCategoryService {
                - Brewing recipes, ratios and troubleshooting.
                - General coffee recommendations and advice.
 
-            2. Return CONVERSATION when the user asks about
+            2. Return SHOP for questions about Brewly Coffee as a store, including:
+               - Shipping, delivery times, delivery costs and free delivery.
+               - Returns, refunds, exchanges and damaged or wrong orders.
+               - Orders, payment and the online shop.
+               - Company information, such as contact details and locations.
+
+            3. Return CONVERSATION when the user asks about
                information they previously shared or something
                discussed in the current conversation.
 
-            3. Return CLARIFY when a coffee-related question lacks
-               essential information needed to answer it.
+            4. Return CLARIFY when a coffee-related or shop-related
+               question lacks essential information needed to answer it.
 
-            4. Return NONE for questions unrelated to coffee.
+            5. Return NONE for questions unrelated to coffee or
+               the Brewly Coffee store.
 
             Examples:
 
@@ -71,6 +79,15 @@ public class QueryCategoryService {
 
             Question: What is the best brewing temperature?
             Answer: COFFEE
+
+            Question: How long does shipping take?
+            Answer: SHOP
+
+            Question: Can I return coffee I bought last week?
+            Answer: SHOP
+
+            Question: Is delivery free?
+            Answer: SHOP
 
             Question: What coffee did I say I liked earlier?
             Answer: CONVERSATION

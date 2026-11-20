@@ -36,6 +36,18 @@ spring:
 app:
   rag:
     similarity-threshold: 0.35
+  crawler:
+    max-pages: 50
+    max-depth: 5
+    request-timeout: 10s
+    brewly:
+      start-url: http://localhost:3000/
+      # Nightly crawl at 02:00 Budapest time. Cron fields: sec min hour day month weekday.
+      cron: "0 0 2 * * *"
+      zone: Europe/Budapest
+      # If the site is offline, retry after this delay, up to max-attempts times in total.
+      retry-delay: 1h
+      max-attempts: 3
   integrations:
     youtrack:
       url: http://localhost:8090
