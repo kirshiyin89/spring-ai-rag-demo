@@ -37,6 +37,15 @@ public class Tenant {
     @Column(name = "system_prompt", columnDefinition = "TEXT")
     private String systemPrompt;
 
+    @Column(name = "classifier_prompt", columnDefinition = "TEXT")
+    private String classifierPrompt;
+
+    @Column(name = "clarification_prompt", columnDefinition = "TEXT")
+    private String clarificationPrompt;
+
+    @Column(name = "out_of_scope_message", columnDefinition = "TEXT")
+    private String outOfScopeMessage;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -48,5 +57,18 @@ public class Tenant {
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+    }
+
+    /**
+     * Returns a configured tenant setting, or fails fast. A missing value must never be
+     * filled in from another tenant's configuration.
+     */
+    public String requireSetting(String value, String settingName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(
+                "Tenant " + slug + " has no " + settingName + " configured"
+            );
+        }
+        return value;
     }
 }

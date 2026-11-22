@@ -29,7 +29,7 @@ public class ImageAnalysisService {
     return chatClientBuilder.build()
         .prompt()
         .system("""
-            You are FinFlow's IT support assistant.
+            You are the company's IT support assistant.
 
             Analyze the uploaded error screenshot.
 

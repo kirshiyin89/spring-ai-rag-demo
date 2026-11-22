@@ -120,21 +120,7 @@ public class AssistantService {
     }
 
     if ("NONE".equalsIgnoreCase(category)) {
-      return switch (tenant.getSlug()) {
-        case "brewly" ->
-            "I'm here to help with coffee, brewing methods, coffee beans, "
-                + "equipment, and our delivery, returns and orders. "
-                + "I can't help with that topic.";
-
-        case "finflow" ->
-            "I can help with FinFlow company documentation, "
-                + "employee onboarding, internal IT support, and YouTrack tickets. "
-                + "I can't answer general knowledge questions.";
-
-        default -> throw new IllegalArgumentException(
-            "Unsupported tenant: " + tenant.getSlug()
-        );
-      };
+      return tenant.requireSetting(tenant.getOutOfScopeMessage(), "out-of-scope message");
     }
 
     // Each tenant's persona lives in tenants.system_prompt. Never fall back to another
@@ -332,52 +318,14 @@ public class AssistantService {
 
 
   private String generateClarification(String question, Tenant tenant) {
-    if ("brewly".equals(tenant.getSlug())) {
-      return generateBrewlyClarification(question);
-    }
+    String clarificationPrompt = tenant.requireSetting(
+        tenant.getClarificationPrompt(), "clarification prompt"
+    );
 
-    return generateFinflowClarification(question);
-  }
-
-  private String generateBrewlyClarification(String question) {
-    return Objects.requireNonNull(clarificationClient.prompt().system("""
-        You are the friendly customer assistant for Brewly Coffee, a coffee roastery in Budapest.
-
-        The customer's message is unclear or is missing a detail needed to answer it.
-
-        Ask one short, warm follow-up question that helps you understand what they need.
-        Use the customer's own words where possible.
-        Where it helps, offer a few examples from these topics: coffee beans, espresso,
-        filter coffee, brewing methods, equipment, delivery, returns and orders.
-
-        Keep it to one or two short sentences in simple language.
-        Do not answer the original question.
-        Ask only one question.
-        Do not invent prices, delivery times, policies or contact details.
-        Do not mention employees, IT, tickets or internal systems.
-        """).user(question).call().content()).trim();
-  }
-
-  private String generateFinflowClarification(String question) {
-    return Objects.requireNonNull(clarificationClient.prompt().system("""
-        You are a friendly assistant for FinFlow Technologies,
-        helping employees with internal company documentation.
-        
-        The employee's request is ambiguous or lacks enough
-        detail to identify what they need.
-        
-        Ask one short, natural follow-up question that helps
-        identify their intent.
-        
-        Use the employee's original wording and context.
-        Offer relevant examples from these topics when useful:
-        onboarding, GitLab access, VPN and WLAN, hardware
-        requests, software licenses, and company information.
-        
-        Do not answer the original question.
-        Do not invent company policies or procedures.
-        Do not ask multiple questions at once.
-        """).user(question).call().content()).trim();
+    return Objects.requireNonNull(
+        clarificationClient.prompt().system(clarificationPrompt)
+            .user(question).call().content()
+    ).trim();
   }
 
 
@@ -398,7 +346,7 @@ public class AssistantService {
     // chat.
     var collectingDraft = pendingDraftStore.startCollecting(tenant.getId(), username, conversationId, question);
     String systemPrompt = """
-        You are FinFlow's internal IT support assistant.
+        You are the company's internal IT support assistant.
         
         Prepare a ticket from the employee's reported information.
         
