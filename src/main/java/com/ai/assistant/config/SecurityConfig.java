@@ -1,8 +1,10 @@
 package com.ai.assistant.config;
 
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,15 +18,40 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 public class SecurityConfig {
+
+  private static final String PUBLIC_BREWLY_CHAT_PATH = "/api/public/brewly/chat";
+
+  @Value("${app.public-chat.allowed-origins:http://localhost:3000}")
+  private String[] publicChatAllowedOrigins;
+
+  @Bean
+  CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOrigins(List.of(publicChatAllowedOrigins));
+    configuration.setAllowedMethods(List.of(HttpMethod.POST.name(), HttpMethod.OPTIONS.name()));
+    configuration.setAllowedHeaders(List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
+    // The widget never sends cookies, so credentials are not allowed.
+    configuration.setAllowCredentials(false);
+    configuration.setMaxAge(600L);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration(PUBLIC_BREWLY_CHAT_PATH, configuration);
+    return source;
+  }
 
   @Bean
   SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
     return http
         // Enable CSRF protection using a cookie-based token.
+        // The public Brewly chat is anonymous and sends no cookies or credentials,
+        // so it does not need a CSRF token.
         .csrf(csrf -> csrf
             .csrfTokenRepository(
                 CookieCsrfTokenRepository.withHttpOnlyFalse()
@@ -32,7 +59,11 @@ public class SecurityConfig {
             .csrfTokenRequestHandler(
                 new CsrfTokenRequestAttributeHandler()
             )
+            .ignoringRequestMatchers(PUBLIC_BREWLY_CHAT_PATH)
         )
+
+        // Cross-origin access for the public website widget only.
+        .cors(Customizer.withDefaults())
 
         // Create an HTTP session when authentication succeeds.
         .sessionManagement(session -> session
@@ -45,6 +76,12 @@ public class SecurityConfig {
             .requestMatchers(
                 "/login",
                 "/error"
+            ).permitAll()
+
+            // Anonymous chat for public Brewly website visitors (rate-limited, Brewly tenant only).
+            .requestMatchers(
+                HttpMethod.POST,
+                PUBLIC_BREWLY_CHAT_PATH
             ).permitAll()
 
             // Protect the chatbot frontend.

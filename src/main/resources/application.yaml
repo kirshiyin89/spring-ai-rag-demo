@@ -36,6 +36,11 @@ spring:
 app:
   rag:
     similarity-threshold: 0.35
+  public-chat:
+    # Origins allowed to call the anonymous Brewly chat endpoint (comma-separated).
+    allowed-origins: ${PUBLIC_CHAT_ALLOWED_ORIGINS:http://localhost:3000}
+    # Per client IP limit for the anonymous endpoint.
+    max-requests-per-minute: 10
   crawler:
     max-pages: 50
     max-depth: 5
