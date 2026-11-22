@@ -54,7 +54,7 @@ public class PublicBrewlyChatController {
 
     Tenant brewly = tenantService.resolveBySlug(CrawlIngestionService.BREWLY_SLUG);
 
-    String answer = assistantService.askWithRag(
+    String answer = assistantService.answerPublic(
         request.conversationId(),
         request.question(),
         brewly);

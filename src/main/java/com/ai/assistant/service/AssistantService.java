@@ -12,17 +12,14 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.rag.Query;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.core.io.Resource;
 import java.util.List;
 
 @Slf4j
@@ -32,7 +29,6 @@ public class AssistantService {
   private final ChatClient chatClient;
   private final ChatClient clarificationClient;
   private final ChatMemory chatMemory;
-  private final Resource systemPromptResource;
   private final QueryCategoryService queryCategoryService;
   private final CompressionQueryTransformer compressionQueryTransformer;
   private final RetrievalAugmentationAdvisor retrievalAugmentationAdvisor;
@@ -45,7 +41,6 @@ public class AssistantService {
   private final TenantService tenantService;
 
   public AssistantService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory,
-      @Value("classpath:/prompts/system-prompt.st") Resource systemPromptResource,
       QueryCategoryService queryCategoryService,
       CompressionQueryTransformer compressionQueryTransformer,
       RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, TicketTools ticketTools,
@@ -70,8 +65,6 @@ public class AssistantService {
 
     this.chatClient = chatClientBuilder.defaultAdvisors(
         MessageChatMemoryAdvisor.builder(chatMemory).build()).build();
-
-    this.systemPromptResource = systemPromptResource;
   }
 
 
@@ -123,14 +116,14 @@ public class AssistantService {
     log.info("Classified category: {}", category);
 
     if ("CLARIFY".equalsIgnoreCase(category) && ticketContext.isBlank()) {
-      return generateClarification(question);
+      return generateClarification(question, tenant);
     }
 
     if ("NONE".equalsIgnoreCase(category)) {
       return switch (tenant.getSlug()) {
         case "brewly" ->
-            "I'm here to help with coffee, brewing methods, "
-                + "coffee beans, and coffee equipment. "
+            "I'm here to help with coffee, brewing methods, coffee beans, "
+                + "equipment, and our delivery, returns and orders. "
                 + "I can't help with that topic.";
 
         case "finflow" ->
@@ -144,21 +137,16 @@ public class AssistantService {
       };
     }
 
+    // Each tenant's persona lives in tenants.system_prompt. Never fall back to another
+    // tenant's prompt; a missing prompt is a configuration error.
     String systemPrompt = tenant.getSystemPrompt();
 
     if (systemPrompt == null || systemPrompt.isBlank()) {
-      log.info(
-          "No tenant-specific system prompt found for {}. Using default prompt.",
-          tenant.getSlug()
-      );
-
-      systemPrompt = new PromptTemplate(systemPromptResource).render();
-    } else {
-      log.info(
-          "Using tenant-specific system prompt for {}",
-          tenant.getSlug()
+      throw new IllegalStateException(
+          "Tenant " + tenant.getSlug() + " has no system prompt configured"
       );
     }
+
     String userMessage = standaloneQuestion;
 
     if (!ticketContext.isBlank()) {
@@ -194,6 +182,21 @@ public class AssistantService {
             ))
         .call()
         .content();
+  }
+
+  /**
+   * Answers an anonymous public visitor. Greetings, thanks and farewells get a short
+   * conversational reply. Everything else goes through the knowledge path. The draft
+   * and ticket flows are never used here.
+   */
+  public String answerPublic(String conversationId, String question, Tenant tenant) {
+    var conversationalIntent = conversationalIntentClassifier.classify(question);
+
+    if (conversationalIntent.isPresent()) {
+      return handleConversationalIntent(conversationalIntent.get()).message();
+    }
+
+    return askWithRag(conversationId, question, tenant);
   }
 
   private boolean ticketsEnabled(Tenant tenant) {
@@ -328,7 +331,34 @@ public class AssistantService {
   }
 
 
-  private String generateClarification(String question) {
+  private String generateClarification(String question, Tenant tenant) {
+    if ("brewly".equals(tenant.getSlug())) {
+      return generateBrewlyClarification(question);
+    }
+
+    return generateFinflowClarification(question);
+  }
+
+  private String generateBrewlyClarification(String question) {
+    return Objects.requireNonNull(clarificationClient.prompt().system("""
+        You are the friendly customer assistant for Brewly Coffee, a coffee roastery in Budapest.
+
+        The customer's message is unclear or is missing a detail needed to answer it.
+
+        Ask one short, warm follow-up question that helps you understand what they need.
+        Use the customer's own words where possible.
+        Where it helps, offer a few examples from these topics: coffee beans, espresso,
+        filter coffee, brewing methods, equipment, delivery, returns and orders.
+
+        Keep it to one or two short sentences in simple language.
+        Do not answer the original question.
+        Ask only one question.
+        Do not invent prices, delivery times, policies or contact details.
+        Do not mention employees, IT, tickets or internal systems.
+        """).user(question).call().content()).trim();
+  }
+
+  private String generateFinflowClarification(String question) {
     return Objects.requireNonNull(clarificationClient.prompt().system("""
         You are a friendly assistant for FinFlow Technologies,
         helping employees with internal company documentation.

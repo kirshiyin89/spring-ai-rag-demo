@@ -45,7 +45,7 @@ class PublicBrewlyChatControllerTest {
     brewly.setId(1L);
     brewly.setSlug("brewly");
     when(tenantService.resolveBySlug("brewly")).thenReturn(brewly);
-    when(assistantService.askWithRag(anyString(), anyString(), any(Tenant.class)))
+    when(assistantService.answerPublic(anyString(), anyString(), any(Tenant.class)))
         .thenReturn("We ship within 3 business days.");
 
     mockMvc.perform(post(CHAT_URL)
