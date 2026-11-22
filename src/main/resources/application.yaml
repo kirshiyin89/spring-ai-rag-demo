@@ -45,14 +45,13 @@ app:
     max-pages: 50
     max-depth: 5
     request-timeout: 10s
-    brewly:
-      start-url: http://localhost:3000/
-      # Nightly crawl at 02:00 Budapest time. Cron fields: sec min hour day month weekday.
-      cron: "0 0 2 * * *"
-      zone: Europe/Budapest
-      # If the site is offline, retry after this delay, up to max-attempts times in total.
-      retry-delay: 1h
-      max-attempts: 3
+    # Each tenant's start URL lives in tenants.crawl_start_url. These settings apply to every
+    # tenant that has one. Nightly crawl at 02:00 Budapest time. Cron fields: sec min hour day month weekday.
+    cron: "0 0 2 * * *"
+    zone: Europe/Budapest
+    # If a site is offline, retry after this delay, up to max-attempts times in total.
+    retry-delay: 1h
+    max-attempts: 3
   integrations:
     youtrack:
       url: http://localhost:8090
@@ -84,8 +83,10 @@ app:
       max-request-size: 6MB
 
   tenancy:
-    finflow-users: "${DB_USERNAME},${IT_SUPPORT_USERNAME},${IT_ADMIN_USERNAME}"
-    brewly-user: ${BREWLY_USERNAME}
+    # Login usernames per tenant slug (comma-separated). A new tenant needs a new entry here.
+    users:
+      finflow: "${DB_USERNAME},${IT_SUPPORT_USERNAME},${IT_ADMIN_USERNAME}"
+      brewly: ${BREWLY_USERNAME}
 
 logging:
   level:

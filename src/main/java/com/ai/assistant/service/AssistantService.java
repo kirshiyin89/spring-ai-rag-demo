@@ -87,7 +87,7 @@ public class AssistantService {
     log.info("History messages: {}", history.size());
     log.info("Original question: {}", question);
 
-    // Ticket lookups are FinFlow-only. Other tenants never reach ticket data.
+    // Ticket lookups only run for tenants with tickets enabled. Other tenants never reach ticket data.
     boolean ticketsEnabled = ticketsEnabled(tenant);
 
     // Check authorization before retrieving ticket information.
@@ -186,7 +186,7 @@ public class AssistantService {
   }
 
   private boolean ticketsEnabled(Tenant tenant) {
-    return tenant != null && "finflow".equals(tenant.getSlug());
+    return tenant != null && tenant.isTicketsEnabled();
   }
 
   private String retrieveTicketContext(String question) {
@@ -331,7 +331,7 @@ public class AssistantService {
 
   public AssistantResponse prepareIssueDraft(String conversationId, String question,
       Tenant tenant) {
-    requireFinflowTicketWorkflow(tenant);
+    requireTicketWorkflow(tenant);
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
     if (authentication == null || !authentication.isAuthenticated()) {
@@ -449,7 +449,7 @@ public class AssistantService {
 
 
   public AssistantResponse approveIssueDraft(String conversationId, String draftId, Tenant tenant) {
-    requireFinflowTicketWorkflow(tenant);
+    requireTicketWorkflow(tenant);
     String username = requireCurrentUsername();
 
     var claimed = pendingDraftStore.claim(tenant.getId(), username, conversationId, draftId);
@@ -484,7 +484,7 @@ public class AssistantService {
 
 
   public AssistantResponse cancelIssueDraft(String conversationId, String draftId, Tenant tenant) {
-    requireFinflowTicketWorkflow(tenant);
+    requireTicketWorkflow(tenant);
     String username = requireCurrentUsername();
 
     var pending = pendingDraftStore.get(tenant.getId(), username, conversationId);
@@ -647,9 +647,9 @@ public class AssistantService {
 
 // Detect new ticket intent.
     if (isTicketRequest(question)) {
-      if (!"finflow".equals(tenant.getSlug())) {
+      if (!tenant.isTicketsEnabled()) {
         return new AssistantResponse(AssistantResponse.ResponseType.ANSWER,
-            "Ticket workflows are restricted to FinFlow users.", null, null);
+            "Ticket workflows are not enabled for this tenant.", null, null);
       }
       log.info("Ticket request detected: {}", isTicketRequest(question));
       return prepareIssueDraft(conversationId, question, tenant);
@@ -851,10 +851,10 @@ public class AssistantService {
     log.info("Image analysis added to conversation memory: {}", conversationId);
   }
 
-  private void requireFinflowTicketWorkflow(Tenant tenant) {
-    if (tenant == null || !"finflow".equals(tenant.getSlug())) {
+  private void requireTicketWorkflow(Tenant tenant) {
+    if (tenant == null || !tenant.isTicketsEnabled()) {
       throw new org.springframework.security.access.AccessDeniedException(
-          "Ticket workflows are restricted to FinFlow users.");
+          "Ticket workflows are not enabled for this tenant.");
     }
   }
 

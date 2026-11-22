@@ -31,7 +31,6 @@ class CrawlIngestionServiceTest {
   private CrawlIngestionService service;
 
   private Tenant brewly;
-  private Tenant finflow;
 
   @BeforeEach
   void setUp() {
@@ -45,21 +44,20 @@ class CrawlIngestionServiceTest {
     // The crawl lock is free unless a test says otherwise.
     when(jdbcTemplate.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(true);
 
-    service = new CrawlIngestionService(crawler, vectorStore, jdbcTemplate, START_URL);
+    service = new CrawlIngestionService(crawler, vectorStore, jdbcTemplate);
 
-    brewly = tenant(2L, "brewly");
-    finflow = tenant(1L, "finflow");
+    brewly = tenant(2L, "brewly", START_URL);
   }
 
   @Test
-  void shouldIndexEachCrawledPageUnderTheBrewlyTenant() {
+  void shouldIndexEachCrawledPageUnderTheTenantThatOwnsTheSite() {
     when(crawler.crawl(START_URL)).thenReturn(List.of(
         new ExtractedPage("http://localhost:3000/products.html", "Products", "products",
             "Espresso beans for home brewing."),
         new ExtractedPage("http://localhost:3000/faq.html", "FAQ", "faq",
             "Shipping takes two to three business days.")));
 
-    service.crawlBrewly(brewly);
+    service.crawlWebsite(brewly);
 
     ArgumentCaptor<List<Document>> captor = ArgumentCaptor.forClass(List.class);
     verify(vectorStore, org.mockito.Mockito.times(2)).add(captor.capture());
@@ -77,23 +75,26 @@ class CrawlIngestionServiceTest {
   void shouldRejectACrawlWhileAnotherCrawlHoldsTheLock() {
     when(jdbcTemplate.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(false);
 
-    assertThrows(CrawlAlreadyRunningException.class, () -> service.crawlBrewly(brewly));
+    assertThrows(CrawlAlreadyRunningException.class, () -> service.crawlWebsite(brewly));
 
     verifyNoInteractions(crawler, vectorStore);
   }
 
   @Test
-  void shouldRejectCrawlForAnyTenantOtherThanBrewly() {
-    assertThrows(IllegalArgumentException.class, () -> service.crawlBrewly(finflow));
+  void shouldRejectACrawlForATenantWithoutAStartUrl() {
+    Tenant noWebsite = tenant(1L, "finflow", null);
+
+    assertThrows(IllegalArgumentException.class, () -> service.crawlWebsite(noWebsite));
 
     verifyNoInteractions(crawler, vectorStore);
   }
 
-  private static Tenant tenant(Long id, String slug) {
+  private static Tenant tenant(Long id, String slug, String crawlStartUrl) {
     Tenant tenant = new Tenant();
     tenant.setId(id);
     tenant.setSlug(slug);
     tenant.setName(slug);
+    tenant.setCrawlStartUrl(crawlStartUrl);
     return tenant;
   }
 }

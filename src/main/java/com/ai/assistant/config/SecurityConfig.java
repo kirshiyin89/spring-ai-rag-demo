@@ -25,7 +25,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 public class SecurityConfig {
 
-  private static final String PUBLIC_BREWLY_CHAT_PATH = "/api/public/brewly/chat";
+  // Anonymous chat for public website widgets. The endpoint itself only answers for tenants
+  // with public chat enabled, so this path can match every tenant.
+  private static final String PUBLIC_CHAT_PATH = "/api/public/*/chat";
 
   @Value("${app.public-chat.allowed-origins:http://localhost:3000}")
   private String[] publicChatAllowedOrigins;
@@ -41,7 +43,7 @@ public class SecurityConfig {
     configuration.setMaxAge(600L);
 
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration(PUBLIC_BREWLY_CHAT_PATH, configuration);
+    source.registerCorsConfiguration(PUBLIC_CHAT_PATH, configuration);
     return source;
   }
 
@@ -59,7 +61,7 @@ public class SecurityConfig {
             .csrfTokenRequestHandler(
                 new CsrfTokenRequestAttributeHandler()
             )
-            .ignoringRequestMatchers(PUBLIC_BREWLY_CHAT_PATH)
+            .ignoringRequestMatchers(PUBLIC_CHAT_PATH)
         )
 
         // Cross-origin access for the public website widget only.
@@ -78,10 +80,10 @@ public class SecurityConfig {
                 "/error"
             ).permitAll()
 
-            // Anonymous chat for public Brewly website visitors (rate-limited, Brewly tenant only).
+            // Anonymous chat for public website visitors (rate-limited, public tenants only).
             .requestMatchers(
                 HttpMethod.POST,
-                PUBLIC_BREWLY_CHAT_PATH
+                PUBLIC_CHAT_PATH
             ).permitAll()
 
             // Protect the chatbot frontend.

@@ -13,13 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Crawls the Brewly website and stores each page in the vector store under the Brewly tenant.
+ * Crawls a tenant's website and stores each page in the vector store under that tenant.
  *
  * <p>Pages are matched by URL within the tenant. Unchanged pages are skipped, changed pages
  * replace their old chunks, and chunks for pages that no longer exist on the site are removed.
@@ -29,52 +28,48 @@ import org.springframework.transaction.annotation.Transactional;
 public class CrawlIngestionService {
 
   static final String SOURCE = "web-crawl";
-  public static final String BREWLY_SLUG = "brewly";
-  private static final String CRAWL_LOCK_NAME = "brewly-website-crawl";
 
   private final WebCrawlerService crawler;
   private final VectorStore vectorStore;
   private final JdbcTemplate jdbcTemplate;
   private final TokenTextSplitter textSplitter;
-  private final String brewlyStartUrl;
 
   public CrawlIngestionService(
       WebCrawlerService crawler,
       VectorStore vectorStore,
-      JdbcTemplate jdbcTemplate,
-      @Value("${app.crawler.brewly.start-url}") String brewlyStartUrl) {
+      JdbcTemplate jdbcTemplate) {
     this.crawler = crawler;
     this.vectorStore = vectorStore;
     this.jdbcTemplate = jdbcTemplate;
-    this.brewlyStartUrl = brewlyStartUrl;
     this.textSplitter = TokenTextSplitter.builder()
         .withChunkSize(200)
         .build();
   }
 
   /**
-   * Crawls the configured Brewly website and updates the vector store.
-   * The start URL comes from configuration, never from a request, and only the Brewly tenant is accepted.
+   * Crawls the tenant's configured website and updates the vector store. The start URL comes
+   * from the tenant's row in the database, never from a request.
    */
   @Transactional(rollbackFor = Exception.class)
-  public CrawlSummary crawlBrewly(Tenant tenant) {
+  public CrawlSummary crawlWebsite(Tenant tenant) {
 
-    if (!BREWLY_SLUG.equals(tenant.getSlug())) {
+    String startUrl = tenant.getCrawlStartUrl();
+    if (startUrl == null || startUrl.isBlank()) {
       throw new IllegalArgumentException(
-          "Website crawling is only allowed for the brewly tenant");
+          "Website crawling is not configured for tenant " + tenant.getSlug());
     }
 
-    // Held until this transaction ends, so only one crawl runs at a time, across all
-    // callers and application instances.
-    if (!acquireCrawlLock()) {
+    // Held until this transaction ends, so only one crawl per tenant runs at a time, across
+    // all callers and application instances.
+    if (!acquireCrawlLock(tenant)) {
       throw new CrawlAlreadyRunningException();
     }
 
-    List<ExtractedPage> pages = crawler.crawl(brewlyStartUrl);
+    List<ExtractedPage> pages = crawler.crawl(startUrl);
 
     if (pages.isEmpty()) {
       // Keep the stored content. An empty result usually means the site is down.
-      log.warn("Crawl of {} found no pages; stored content was not changed", brewlyStartUrl);
+      log.warn("Crawl of {} found no pages; stored content was not changed", startUrl);
       return new CrawlSummary(0, 0, 0, 0);
     }
 
@@ -125,19 +120,19 @@ public class CrawlIngestionService {
     int removed = removeStalePages(tenant, crawledUrls);
 
     CrawlSummary summary = new CrawlSummary(indexed, updated, skipped, removed);
-    log.info("Brewly crawl finished: {}", summary);
+    log.info("Crawl finished for tenant {}: {}", tenant.getSlug(), summary);
     return summary;
   }
 
   /**
-   * Takes a transaction-scoped Postgres advisory lock. It returns false when another
-   * transaction already holds it, and the lock is released when the transaction ends.
+   * Takes a transaction-scoped Postgres advisory lock for this tenant. It returns false when
+   * another transaction already holds it, and the lock is released when the transaction ends.
    */
-  private boolean acquireCrawlLock() {
+  private boolean acquireCrawlLock(Tenant tenant) {
     Boolean acquired = jdbcTemplate.queryForObject(
         "SELECT pg_try_advisory_xact_lock(hashtext(?))",
         Boolean.class,
-        CRAWL_LOCK_NAME
+        "website-crawl:" + tenant.getSlug()
     );
     return Boolean.TRUE.equals(acquired);
   }

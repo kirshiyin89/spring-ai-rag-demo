@@ -123,12 +123,12 @@ public class TicketStatusChangeService {
     if (tenantService != null) {
       try {
         var tenant = tenantService.resolveForUsername(authentication.getName());
-        if (!"finflow".equals(tenant.getSlug())) {
-          return "ACCESS_DENIED: Ticket approvals are restricted to FinFlow.";
+        if (!tenant.isTicketsEnabled()) {
+          return "ACCESS_DENIED: Ticket approvals are not enabled for this tenant.";
         }
         tenantId = tenant.getId();
       } catch (org.springframework.security.access.AccessDeniedException ex) {
-        return "ACCESS_DENIED: Ticket approvals are restricted to FinFlow.";
+        return "ACCESS_DENIED: Ticket approvals are not enabled for this tenant.";
       }
     }
 

@@ -34,14 +34,14 @@ public class ChatController {
   private final CrawlIngestionService crawlIngestionService;
 
 
-  // The crawl always targets the Brewly tenant. The URL and tenant come from
-  // configuration, not from the request.
+  // Crawls one tenant's website, named by slug (for example ?tenant=brewly). The start URL
+  // comes from that tenant's configuration, never from the request. Admin only.
   @PostMapping(path = "crawl")
-  public CrawlSummary crawlBrewlyWebsite() {
+  public CrawlSummary crawlWebsite(@RequestParam("tenant") String tenantSlug) {
 
-    Tenant brewly = tenantService.resolveBySlug(CrawlIngestionService.BREWLY_SLUG);
+    Tenant tenant = tenantService.resolveBySlug(tenantSlug);
 
-    return crawlIngestionService.crawlBrewly(brewly);
+    return crawlIngestionService.crawlWebsite(tenant);
   }
 
   @ExceptionHandler(CrawlSiteUnavailableException.class)

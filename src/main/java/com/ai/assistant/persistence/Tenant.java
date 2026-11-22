@@ -46,6 +46,33 @@ public class Tenant {
     @Column(name = "out_of_scope_message", columnDefinition = "TEXT")
     private String outOfScopeMessage;
 
+    /** Whether the ticket workflows (drafts, status changes, YouTrack lookups) are enabled. */
+    @Column(name = "tickets_enabled", nullable = false)
+    private boolean ticketsEnabled;
+
+    /** Whether the anonymous public chat endpoint answers for this tenant. */
+    @Column(name = "public_chat_enabled", nullable = false)
+    private boolean publicChatEnabled;
+
+    /** Start URL for the website crawler. Null when the tenant has no website to crawl. */
+    @Column(name = "crawl_start_url", length = 500)
+    private String crawlStartUrl;
+
+    /** Value stored as the "source" metadata of this tenant's knowledge documents. */
+    @Column(name = "knowledge_source", nullable = false, length = 100)
+    private String knowledgeSource = "knowledge-base";
+
+    /** Value stored as the "documentType" metadata of this tenant's knowledge documents. */
+    @Column(name = "knowledge_document_type", nullable = false, length = 100)
+    private String knowledgeDocumentType = "business-documentation";
+
+    /**
+     * JSON object keyed by document filename, with per-document metadata such as category
+     * and department. The key "*" holds the defaults for documents without their own entry.
+     */
+    @Column(name = "document_metadata", columnDefinition = "TEXT")
+    private String documentMetadata;
+
     @Column(nullable = false)
     private boolean active = true;
 

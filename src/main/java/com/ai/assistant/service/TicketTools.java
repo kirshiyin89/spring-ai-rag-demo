@@ -58,7 +58,7 @@ public class TicketTools {
       return "ACCESS_DENIED: You do not have permission to view IT support tickets.";
     }
 
-    var tenant = resolveFinflowTenant(authentication);
+    var tenant = resolveTicketTenant(authentication);
     if (tenantService != null && tenant == null) {
       return "ACCESS_DENIED: You do not have permission "
           + "to view IT support tickets.";
@@ -111,9 +111,9 @@ public class TicketTools {
 
       try {
         assert authentication != null;
-        var tenant = resolveFinflowTenant(authentication);
+        var tenant = resolveTicketTenant(authentication);
         if (tenantService != null && tenant == null) {
-          return "ACCESS_DENIED: Ticket workflows are restricted to FinFlow users.";
+          return "ACCESS_DENIED: Ticket workflows are not enabled for this tenant.";
         }
         var request = tenantService == null
             ? statusChangeService.requestChange(ticketId, requestedStatus, authentication.getName())
@@ -146,13 +146,13 @@ public class TicketTools {
   }
 
 
-  private com.ai.assistant.persistence.Tenant resolveFinflowTenant(Authentication authentication) {
+  private com.ai.assistant.persistence.Tenant resolveTicketTenant(Authentication authentication) {
     if (tenantService == null || authentication == null) {
       return null;
     }
     try {
       var tenant = tenantService.resolveForUsername(authentication.getName());
-      return "finflow".equals(tenant.getSlug()) ? tenant : null;
+      return tenant.isTicketsEnabled() ? tenant : null;
     } catch (org.springframework.security.access.AccessDeniedException ex) {
       return null;
     }

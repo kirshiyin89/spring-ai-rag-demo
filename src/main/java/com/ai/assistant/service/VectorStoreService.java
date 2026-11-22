@@ -1,6 +1,9 @@
 package com.ai.assistant.service;
 
 import com.ai.assistant.persistence.Tenant;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -19,9 +22,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Loads a tenant's Markdown knowledge files into the vector store.
+ *
+ * <p>Each tenant's files live in {@code classpath:/tenants/<slug>/}. The "source",
+ * "documentType" and per-file metadata come from the tenant's row, so a new tenant needs
+ * no change here.
+ */
 @Slf4j
 @Service
 public class VectorStoreService {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
+  private static final String DEFAULT_METADATA_KEY = "*";
 
   private final VectorStore vectorStore;
   private final JdbcTemplate jdbcTemplate;
@@ -66,19 +79,6 @@ public class VectorStoreService {
       String contentHash = ContentHash.sha256(content);
       Long tenantId = tenant.getId();
 
-      // Remove legacy FinFlow chunks that predate tenant metadata.
-      if ("finflow".equals(tenant.getSlug())) {
-        jdbcTemplate.update(
-            """
-            DELETE FROM vector_store
-            WHERE metadata->>'tenantId' IS NULL
-              AND metadata->>'filename' = ?
-              AND metadata->>'source' = 'onboarding'
-            """,
-            filename
-        );
-      }
-
       // Check the content hash within the current tenant and source only.
       List<String> storedHashes = jdbcTemplate.query(
           """
@@ -90,7 +90,7 @@ public class VectorStoreService {
           """,
           (rs, rowNum) -> rs.getString(1),
           tenantId.toString(),
-          getSource(tenant),
+          tenant.getKnowledgeSource(),
           filename
       );
 
@@ -119,7 +119,7 @@ public class VectorStoreService {
               AND metadata->>'filename' = ?
             """,
             tenantId.toString(),
-            getSource(tenant),
+            tenant.getKnowledgeSource(),
             filename
         );
 
@@ -135,13 +135,8 @@ public class VectorStoreService {
       Map<String, Object> metadata =
           createMetadata(filename, tenant);
 
-      metadata.put("source", getSource(tenant));
-      metadata.put(
-          "documentType",
-          "finflow".equals(tenant.getSlug())
-              ? "internal-documentation"
-              : "business-documentation"
-      );
+      metadata.put("source", tenant.getKnowledgeSource());
+      metadata.put("documentType", tenant.getKnowledgeDocumentType());
       metadata.put(
           "sourceDocumentId",
           tenant.getSlug() + ":" + filename
@@ -179,28 +174,19 @@ public class VectorStoreService {
 
   private String getResourcePattern(Tenant tenant) {
 
-    return switch (tenant.getSlug()) {
-      case "finflow" -> "classpath:/onboarding/*.md";
-      default -> {
-        if (!tenant.getSlug().matches("[a-z0-9-]+")) {
-          throw new IllegalArgumentException(
-              "Invalid tenant slug: " + tenant.getSlug()
-          );
-        }
+    if (!tenant.getSlug().matches("[a-z0-9-]+")) {
+      throw new IllegalArgumentException(
+          "Invalid tenant slug: " + tenant.getSlug()
+      );
+    }
 
-        yield "classpath:/tenants/"
-            + tenant.getSlug()
-            + "/*.md";
-      }
-    };
+    return "classpath:/tenants/" + tenant.getSlug() + "/*.md";
   }
 
-  private String getSource(Tenant tenant) {
-    return "finflow".equals(tenant.getSlug())
-        ? "onboarding"
-        : "knowledge-base";
-  }
-
+  /**
+   * Builds the per-document metadata from the tenant's {@code document_metadata} JSON.
+   * A document without its own entry gets the entry under the "*" key.
+   */
   private Map<String, Object> createMetadata(
       String filename,
       Tenant tenant
@@ -212,53 +198,28 @@ public class VectorStoreService {
     metadata.put("tenantId", tenant.getId());
     metadata.put("filename", filename);
 
-    if ("finflow".equals(tenant.getSlug())) {
+    Map<String, Map<String, String>> byFilename = parseDocumentMetadata(tenant);
+    Map<String, String> attributes = byFilename.containsKey(filename)
+        ? byFilename.get(filename)
+        : byFilename.getOrDefault(DEFAULT_METADATA_KEY, Map.of());
 
-      Map<String, Object> existingMetadata = switch (filename) {
-        case "company-overview.md" -> Map.of(
-            "category", "company",
-            "department", "IT"
-        );
-        case "new-employee-onboarding.md" -> Map.of(
-            "category", "onboarding",
-            "department", "IT"
-        );
-        case "gitlab-access.md" -> Map.of(
-            "category", "access",
-            "department", "IT"
-        );
-        case "vpn-and-wlan-access.md" -> Map.of(
-            "category", "network",
-            "department", "IT"
-        );
-        case "laptop-request.md", "equipment-request.md" -> Map.of(
-            "category", "hardware",
-            "department", "IT"
-        );
-        case "software-license-request.md" -> Map.of(
-            "category", "software",
-            "department", "IT"
-        );
-        default -> Map.of(
-            "category", "other",
-            "department", "IT"
-        );
-      };
-
-      metadata.putAll(existingMetadata);
-
-    } else {
-
-      String category = switch (filename) {
-        case "espresso-guide.md" -> "products";
-        case "shipping-policy.md" -> "shipping";
-        case "return-policy.md" -> "returns";
-        default -> "other";
-      };
-
-      metadata.put("category", category);
-    }
+    metadata.putAll(attributes);
 
     return metadata;
+  }
+
+  private Map<String, Map<String, String>> parseDocumentMetadata(Tenant tenant) {
+    String json = tenant.getDocumentMetadata();
+    if (json == null || json.isBlank()) {
+      return Map.of();
+    }
+
+    try {
+      return JSON.readValue(json, new TypeReference<Map<String, Map<String, String>>>() {
+      });
+    } catch (JsonProcessingException exception) {
+      throw new IllegalStateException(
+          "Tenant " + tenant.getSlug() + " has invalid document_metadata JSON", exception);
+    }
   }
 }
