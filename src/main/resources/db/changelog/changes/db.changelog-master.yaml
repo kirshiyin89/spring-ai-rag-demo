@@ -19,3 +19,5 @@ databaseChangeLog:
       file: db/changelog/changes/009-add-tenant-prompt-settings.sql
   - include:
       file: db/changelog/changes/010-add-tenant-feature-settings.sql
+  - include:
+      file: db/changelog/changes/011-add-tenant-landing-path.sql

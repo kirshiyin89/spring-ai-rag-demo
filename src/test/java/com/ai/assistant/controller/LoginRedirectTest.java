@@ -5,9 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ai.assistant.config.SecurityAccountsProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
@@ -20,33 +20,27 @@ class LoginRedirectTest {
   @Autowired
   private MockMvc mockMvc;
 
-  @Value("${app.security.brewly.username}")
-  private String brewlyUsername;
-
-  @Value("${app.security.brewly.password}")
-  private String brewlyPassword;
-
-  @Value("${app.security.it-support.username}")
-  private String itSupportUsername;
-
-  @Value("${app.security.it-support.password}")
-  private String itSupportPassword;
+  @Autowired
+  private SecurityAccountsProperties accounts;
 
   @Test
   void shouldSendBrewlyCustomersToTheBrewlyPage() throws Exception {
+    // The landing page comes from the tenants table (changeset 011), not from code.
+    var brewly = accounts.withRole("USER").orElseThrow();
     mockMvc.perform(post("/login")
             .with(SecurityMockMvcRequestPostProcessors.csrf())
-            .param("username", brewlyUsername)
-            .param("password", brewlyPassword))
+            .param("username", brewly.username())
+            .param("password", brewly.password()))
         .andExpect(redirectedUrl("/brewly.html"));
   }
 
   @Test
-  void shouldSendOtherUsersToTheFinFlowPage() throws Exception {
+  void shouldSendTenantUsersWithoutCustomLandingPageToTheFinFlowPage() throws Exception {
+    var itSupport = accounts.withRole("IT_SUPPORT").orElseThrow();
     mockMvc.perform(post("/login")
             .with(SecurityMockMvcRequestPostProcessors.csrf())
-            .param("username", itSupportUsername)
-            .param("password", itSupportPassword))
+            .param("username", itSupport.username())
+            .param("password", itSupport.password()))
         .andExpect(redirectedUrl("/"));
   }
 

@@ -4,8 +4,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
+import com.ai.assistant.config.SecurityAccountsProperties;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
@@ -20,11 +20,8 @@ class CrawlEndpointSecurityTest {
   @Autowired
   private MockMvc mockMvc;
 
-  @Value("${app.security.brewly.username}")
-  private String brewlyUsername;
-
-  @Value("${app.security.brewly.password}")
-  private String brewlyPassword;
+  @Autowired
+  private SecurityAccountsProperties accounts;
 
   @Test
   void shouldRejectCrawlWithoutCredentials() throws Exception {
@@ -35,11 +32,12 @@ class CrawlEndpointSecurityTest {
 
   @Test
   void shouldForbidBrewlyCustomerFromCrawling() throws Exception {
+    var brewly = accounts.withRole("USER").orElseThrow();
     mockMvc.perform(post(CRAWL_URL)
             .with(SecurityMockMvcRequestPostProcessors.csrf())
             .with(SecurityMockMvcRequestPostProcessors.httpBasic(
-                brewlyUsername,
-                brewlyPassword)))
+                brewly.username(),
+                brewly.password())))
         .andExpect(status().isForbidden());
   }
 }

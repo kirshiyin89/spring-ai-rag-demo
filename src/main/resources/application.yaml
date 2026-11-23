@@ -76,15 +76,20 @@ app:
       base-url: https://curiousdevscorner.youtrack.cloud/
       shared-secret: ${MCP_SHARED_SECRET}
   security:
-    it-support:
-      username: ${IT_SUPPORT_USERNAME}
-      password: ${IT_SUPPORT_PASSWORD}
-    it-admin:
-      username: ${IT_ADMIN_USERNAME}
-      password: ${IT_ADMIN_PASSWORD}
-    brewly:
-      username: ${BREWLY_USERNAME}
-      password: ${BREWLY_PASSWORD}
+    # Login accounts. An entry with an empty username is left out (the Brewly login is optional).
+    accounts:
+      - username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        role: ADMIN
+      - username: ${IT_SUPPORT_USERNAME}
+        password: ${IT_SUPPORT_PASSWORD}
+        role: IT_SUPPORT
+      - username: ${IT_ADMIN_USERNAME}
+        password: ${IT_ADMIN_PASSWORD}
+        role: IT_ADMIN
+      - username: ${BREWLY_USERNAME:}
+        password: ${BREWLY_PASSWORD:}
+        role: USER
   groq:
     api-key: ${GROQ_API_KEY}
     voice:
@@ -102,7 +107,7 @@ app:
     # Login usernames per tenant slug (comma-separated). A new tenant needs a new entry here.
     users:
       finflow: "${DB_USERNAME},${IT_SUPPORT_USERNAME},${IT_ADMIN_USERNAME}"
-      brewly: ${BREWLY_USERNAME}
+      brewly: ${BREWLY_USERNAME:}
 
 logging:
   level:

@@ -60,10 +60,7 @@ public class TenantService {
             throw new AccessDeniedException("Authenticated user required");
         }
 
-        String tenantSlug = usernamesBySlug.entrySet().stream()
-            .filter(entry -> entry.getValue().contains(username))
-            .map(Map.Entry::getKey)
-            .findFirst()
+        String tenantSlug = slugForUsername(username)
             .orElseThrow(() -> new AccessDeniedException(
                 "No tenant assigned to this user"
             ));
@@ -72,5 +69,24 @@ public class TenantService {
             .orElseThrow(() -> new AccessDeniedException(
                 "Tenant is unavailable"
             ));
+    }
+
+    /**
+     * The active tenant of a user, or empty when the user belongs to no tenant (for example an
+     * IT admin). Unlike {@link #resolveForUsername}, this never throws.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Tenant> findForUsername(String username) {
+        if (username == null || username.isBlank()) {
+            return Optional.empty();
+        }
+        return slugForUsername(username).flatMap(tenantRepository::findBySlugAndActiveTrue);
+    }
+
+    private Optional<String> slugForUsername(String username) {
+        return usernamesBySlug.entrySet().stream()
+            .filter(entry -> entry.getValue().contains(username))
+            .map(Map.Entry::getKey)
+            .findFirst();
     }
 }

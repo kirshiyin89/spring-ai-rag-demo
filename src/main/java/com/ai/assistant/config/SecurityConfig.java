@@ -1,5 +1,7 @@
 package com.ai.assistant.config;
 
+import com.ai.assistant.persistence.Tenant;
+import com.ai.assistant.service.TenantService;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -11,11 +13,13 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
@@ -48,7 +52,8 @@ public class SecurityConfig {
   }
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  SecurityFilterChain securityFilterChain(HttpSecurity http, TenantService tenantService)
+      throws Exception {
 
     return http
         // Enable CSRF protection using a cookie-based token.
@@ -153,14 +158,9 @@ public class SecurityConfig {
             .anyRequest().authenticated()
         )
 
-        // Enable form-based login.
+        // Enable form-based login. Each tenant decides its own landing page in the database.
         .formLogin(form -> form
-            .successHandler((request, response, authentication) ->
-                // Brewly customers (ROLE_USER) get the Brewly page; everyone else gets the FinFlow page.
-                response.sendRedirect(authentication.getAuthorities().stream()
-                        .anyMatch(authority -> "ROLE_USER".equals(authority.getAuthority()))
-                    ? "/brewly.html"
-                    : "/"))
+            .successHandler(landingPageSuccessHandler(tenantService))
         )
 
         // Support HTTP Basic authentication for API clients such as curl.
@@ -173,39 +173,39 @@ public class SecurityConfig {
   }
 
 
+  /** Redirects each user to the landing page of their tenant; users without a tenant go to "/". */
+  AuthenticationSuccessHandler landingPageSuccessHandler(TenantService tenantService) {
+    return (request, response, authentication) -> {
+      String landingPath = tenantService.findForUsername(authentication.getName())
+          .map(Tenant::getLandingPath)
+          .filter(SecurityConfig::isLocalPath)
+          .orElse("/");
+      response.sendRedirect(landingPath);
+    };
+  }
+
+  /** True for a path on this site. Rejects "//host" and "/\host", which browsers read as other sites. */
+  static boolean isLocalPath(String path) {
+    return path != null
+        && path.startsWith("/")
+        && !path.startsWith("//")
+        && !path.startsWith("/\\");
+  }
+
   @Bean
   UserDetailsService userDetailsService(
-      @Value("${spring.datasource.username}") String dbUsername,
-      @Value("${spring.datasource.password}") String dbPassword,
-      @Value("${app.security.it-support.username}") String itSupportUsername,
-      @Value("${app.security.it-support.password}") String itSupportPassword,
-      @Value("${app.security.it-admin.username}") String itAdminUsername,
-      @Value("${app.security.it-admin.password}") String itAdminPassword,
-      PasswordEncoder passwordEncoder,
-      @Value("${app.security.brewly.username}") String brewlyUsername,
-      @Value("${app.security.brewly.password}") String brewlyPassword) {
+      SecurityAccountsProperties accounts,
+      PasswordEncoder passwordEncoder) {
 
-    var dbAdmin = User.withUsername(dbUsername)
-        .password(passwordEncoder.encode(dbPassword))
-        .roles("ADMIN")
-        .build();
+    List<UserDetails> users = accounts.accounts().stream()
+        .map(account -> User.withUsername(account.username())
+            .password(passwordEncoder.encode(account.password()))
+            .roles(account.role())
+            .build())
+        .map(UserDetails.class::cast)
+        .toList();
 
-    var itSupport = User.withUsername(itSupportUsername)
-        .password(passwordEncoder.encode(itSupportPassword))
-        .roles("IT_SUPPORT")
-        .build();
-
-    var itAdmin = User.withUsername(itAdminUsername)
-        .password(passwordEncoder.encode(itAdminPassword))
-        .roles("IT_ADMIN")
-        .build();
-
-    var brewlyUser = User.withUsername(brewlyUsername)
-        .password(passwordEncoder.encode(brewlyPassword))
-        .roles("USER")
-        .build();
-
-    return new InMemoryUserDetailsManager(dbAdmin, itSupport, itAdmin, brewlyUser);
+    return new InMemoryUserDetailsManager(users);
   }
 
   @Bean

@@ -73,6 +73,10 @@ public class Tenant {
     @Column(name = "document_metadata", columnDefinition = "TEXT")
     private String documentMetadata;
 
+    /** Page a user of this tenant is sent to after logging in. Always a local path such as "/". */
+    @Column(name = "landing_path", nullable = false, length = 200)
+    private String landingPath = "/";
+
     @Column(nullable = false)
     private boolean active = true;
 
