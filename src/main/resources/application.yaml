@@ -8,7 +8,7 @@ server:
 
 spring:
   application:
-    name: fintech-ai-assistant
+    name: ai-assistant
 
   datasource:
     url: jdbc:postgresql://localhost:5432/ragdb

@@ -10,7 +10,7 @@
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
   <groupId>com.spring-ai-demo</groupId>
-  <artifactId>fintech-ai-assistant</artifactId>
+  <artifactId>ai-assistant</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <properties>
     <java.version>25</java.version>
