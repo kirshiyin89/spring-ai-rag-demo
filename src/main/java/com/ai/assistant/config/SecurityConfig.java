@@ -32,6 +32,8 @@ public class SecurityConfig {
   // Anonymous chat for public website widgets. The endpoint itself only answers for tenants
   // with public chat enabled, so this path can match every tenant.
   private static final String PUBLIC_CHAT_PATH = "/api/public/*/chat";
+  // The streaming variant of the same question. Path patterns do not overlap, so it needs its own entry.
+  private static final String PUBLIC_CHAT_STREAM_PATH = "/api/public/*/chat/stream";
 
   @Value("${app.public-chat.allowed-origins:http://localhost:3000}")
   private String[] publicChatAllowedOrigins;
@@ -48,6 +50,7 @@ public class SecurityConfig {
 
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration(PUBLIC_CHAT_PATH, configuration);
+    source.registerCorsConfiguration(PUBLIC_CHAT_STREAM_PATH, configuration);
     return source;
   }
 
@@ -66,7 +69,7 @@ public class SecurityConfig {
             .csrfTokenRequestHandler(
                 new CsrfTokenRequestAttributeHandler()
             )
-            .ignoringRequestMatchers(PUBLIC_CHAT_PATH)
+            .ignoringRequestMatchers(PUBLIC_CHAT_PATH, PUBLIC_CHAT_STREAM_PATH)
         )
 
         // Cross-origin access for the public website widget only.
@@ -88,7 +91,8 @@ public class SecurityConfig {
             // Anonymous chat for public website visitors (rate-limited, public tenants only).
             .requestMatchers(
                 HttpMethod.POST,
-                PUBLIC_CHAT_PATH
+                PUBLIC_CHAT_PATH,
+                PUBLIC_CHAT_STREAM_PATH
             ).permitAll()
 
             // Protect the chatbot frontend.

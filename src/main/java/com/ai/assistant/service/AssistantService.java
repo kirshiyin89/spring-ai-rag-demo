@@ -21,6 +21,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import reactor.core.publisher.Flux;
 
 @Slf4j
 @Service
@@ -80,6 +81,26 @@ public class AssistantService {
       String question,
       Tenant tenant
   ) {
+    PreparedAnswer prepared = prepareRagAnswer(conversationId, question, tenant);
+
+    if (prepared.directAnswer() != null) {
+      return prepared.directAnswer();
+    }
+
+    return prepared.promptSpec().call().content();
+  }
+
+  /**
+   * Runs every step before the final model call: memory lookup, ticket routing, query
+   * rewriting, classification and prompt building. Returns either a finished answer (for
+   * example a clarification or out-of-scope reply) or a prompt ready to send to the model.
+   * The JSON and streaming paths both use this, so their rules cannot drift apart.
+   */
+  private PreparedAnswer prepareRagAnswer(
+      String conversationId,
+      String question,
+      Tenant tenant
+  ) {
     String memoryConversationId =
         tenantScopedConversationId(conversationId, tenant);
 
@@ -95,7 +116,7 @@ public class AssistantService {
       Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
       if (!ticketAuthorizationService.canReadTickets(authentication)) {
-        return "You are not authorized to access ticket information.";
+        return PreparedAnswer.direct("You are not authorized to access ticket information.");
       }
     }
 
@@ -116,11 +137,12 @@ public class AssistantService {
     log.info("Classified category: {}", category);
 
     if ("CLARIFY".equalsIgnoreCase(category) && ticketContext.isBlank()) {
-      return generateClarification(question, tenant);
+      return PreparedAnswer.direct(generateClarification(question, tenant));
     }
 
     if ("NONE".equalsIgnoreCase(category)) {
-      return tenant.requireSetting(tenant.getOutOfScopeMessage(), "out-of-scope message");
+      return PreparedAnswer.direct(
+          tenant.requireSetting(tenant.getOutOfScopeMessage(), "out-of-scope message"));
     }
 
     // Each tenant's persona lives in tenants.system_prompt. Never fall back to another
@@ -158,16 +180,14 @@ public class AssistantService {
         .eq("tenantId", tenant.getId())
         .build();
 
-    return promptSpec
+    return PreparedAnswer.model(promptSpec
         .advisors(retrievalAugmentationAdvisor)
         .advisors(advisorSpec -> advisorSpec
             .param(ChatMemory.CONVERSATION_ID, memoryConversationId)
             .param(
                 org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever.FILTER_EXPRESSION,
                 tenantFilter
-            ))
-        .call()
-        .content();
+            )));
   }
 
   /**
@@ -183,6 +203,45 @@ public class AssistantService {
     }
 
     return askWithRag(conversationId, question, tenant);
+  }
+
+  /**
+   * Streaming version of {@link #answerPublic}. The checks and the setup run immediately, so
+   * a refusal or a missing tenant setting still fails before any bytes are sent. Only the
+   * final model answer arrives as a stream of text chunks.
+   *
+   * <p>The memory advisor saves the full reply when the stream completes, so a dropped
+   * connection cannot leave a half-written answer in the conversation history.
+   */
+  public Flux<String> streamPublic(String conversationId, String question, Tenant tenant) {
+    var conversationalIntent = conversationalIntentClassifier.classify(question);
+
+    if (conversationalIntent.isPresent()) {
+      return Flux.just(handleConversationalIntent(conversationalIntent.get()).message());
+    }
+
+    PreparedAnswer prepared = prepareRagAnswer(conversationId, question, tenant);
+
+    if (prepared.directAnswer() != null) {
+      return Flux.just(prepared.directAnswer());
+    }
+
+    return prepared.promptSpec().stream().content();
+  }
+
+  /**
+   * Either a finished answer, or a prompt that still needs the model. Exactly one of the two
+   * fields is set.
+   */
+  private record PreparedAnswer(String directAnswer, ChatClient.ChatClientRequestSpec promptSpec) {
+
+    static PreparedAnswer direct(String answer) {
+      return new PreparedAnswer(answer, null);
+    }
+
+    static PreparedAnswer model(ChatClient.ChatClientRequestSpec promptSpec) {
+      return new PreparedAnswer(null, promptSpec);
+    }
   }
 
   private boolean ticketsEnabled(Tenant tenant) {

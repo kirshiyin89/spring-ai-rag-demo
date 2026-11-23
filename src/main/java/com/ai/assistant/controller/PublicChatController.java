@@ -11,15 +11,18 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
 /**
  * Anonymous chat endpoint for public website widgets, one path per tenant.
@@ -28,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  * answers for tenants with {@code public_chat_enabled} set, and only runs the knowledge (RAG)
  * path. Ticket, draft and image features stay behind authenticated endpoints.
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/public/{tenantSlug}")
 @RequiredArgsConstructor
@@ -49,13 +53,7 @@ public class PublicChatController {
       @Valid @RequestBody PublicChatRequest request,
       HttpServletRequest httpRequest) {
 
-    if (!rateLimiter.tryAcquire(httpRequest.getRemoteAddr())) {
-      throw new RateLimitExceededException();
-    }
-
-    Tenant tenant = tenantService.findActiveBySlug(tenantSlug)
-        .filter(Tenant::isPublicChatEnabled)
-        .orElseThrow(PublicChatUnavailableException::new);
+    Tenant tenant = admit(tenantSlug, httpRequest);
 
     String answer = assistantService.answerPublic(
         request.conversationId(),
@@ -65,9 +63,51 @@ public class PublicChatController {
     return new PublicChatResponse(answer);
   }
 
+  /**
+   * Same question as {@link #chat}, answered as Server-Sent Events. Each text chunk arrives as a
+   * {@code token} event, then one {@code done} event. If the model fails midway, the client gets
+   * an {@code error} event instead of a silent cut-off.
+   */
+  @PostMapping(path = "chat/stream",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  public Flux<ServerSentEvent<StreamChunk>> chatStream(@PathVariable String tenantSlug,
+      @Valid @RequestBody PublicChatRequest request,
+      HttpServletRequest httpRequest) {
+
+    Tenant tenant = admit(tenantSlug, httpRequest);
+
+    return assistantService.streamPublic(request.conversationId(), request.question(), tenant)
+        .map(text -> ServerSentEvent.builder(new StreamChunk(text)).event("token").build())
+        .concatWith(Flux.just(
+            ServerSentEvent.builder(new StreamChunk("")).event("done").build()))
+        .onErrorResume(e -> {
+          log.warn("Streaming answer failed for tenant {}", tenantSlug, e);
+          return Flux.just(ServerSentEvent.builder(
+                  new StreamChunk("The answer could not be completed. Please try again."))
+              .event("error")
+              .build());
+        });
+  }
+
+  // Rate limit first, then the tenant gate. Both endpoints share this, so they cannot differ.
+  private Tenant admit(String tenantSlug, HttpServletRequest httpRequest) {
+    if (!rateLimiter.tryAcquire(httpRequest.getRemoteAddr())) {
+      throw new RateLimitExceededException();
+    }
+
+    return tenantService.findActiveBySlug(tenantSlug)
+        .filter(Tenant::isPublicChatEnabled)
+        .orElseThrow(PublicChatUnavailableException::new);
+  }
+
+  // The stream endpoint accepts only text/event-stream, so these error bodies set their JSON
+  // content type explicitly. Otherwise Spring would reject them with 406 instead of sending the
+  // message.
   @ExceptionHandler(RateLimitExceededException.class)
   public ResponseEntity<Map<String, String>> rateLimited() {
     return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+        .contentType(MediaType.APPLICATION_JSON)
         .body(Map.of("error", "Too many questions in a short time. Please wait a moment."));
   }
 
@@ -76,6 +116,7 @@ public class PublicChatController {
   @ExceptionHandler(PublicChatUnavailableException.class)
   public ResponseEntity<Map<String, String>> unavailable() {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .contentType(MediaType.APPLICATION_JSON)
         .body(Map.of("error", "Chat is not available here."));
   }
 
@@ -90,6 +131,10 @@ public class PublicChatController {
   }
 
   public record PublicChatResponse(String answer) {
+  }
+
+  /** Payload of one SSE event. Wrapping the text in JSON keeps newlines inside the event intact. */
+  public record StreamChunk(String text) {
   }
 
   static class RateLimitExceededException extends RuntimeException {
