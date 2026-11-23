@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -32,7 +31,6 @@ public class CrawlIngestionService {
   private final WebCrawlerService crawler;
   private final VectorStore vectorStore;
   private final JdbcTemplate jdbcTemplate;
-  private final TokenTextSplitter textSplitter;
 
   public CrawlIngestionService(
       WebCrawlerService crawler,
@@ -41,9 +39,6 @@ public class CrawlIngestionService {
     this.crawler = crawler;
     this.vectorStore = vectorStore;
     this.jdbcTemplate = jdbcTemplate;
-    this.textSplitter = TokenTextSplitter.builder()
-        .withChunkSize(200)
-        .build();
   }
 
   /**
@@ -82,7 +77,10 @@ public class CrawlIngestionService {
 
       crawledUrls.add(page.url());
 
-      String contentHash = ContentHash.sha256(page.title() + "\n" + page.text());
+      // The chunking version is part of the hash, so a change to the chunking rules
+      // re-indexes pages whose text did not change.
+      String contentHash = ContentHash.sha256(
+          SectionChunker.VERSION + "\n" + page.title() + "\n" + page.text());
 
       List<String> storedHashes = jdbcTemplate.query(
           """
@@ -108,12 +106,12 @@ public class CrawlIngestionService {
         updated++;
       }
 
-      Document document = new Document(
-          page.title() + "\n\n" + page.text(),
-          createMetadata(page, tenant, contentHash)
-      );
+      Map<String, Object> metadata = createMetadata(page, tenant, contentHash);
+      List<Document> chunks = SectionChunker.chunk(page.title(), sectionsOf(page)).stream()
+          .map(text -> new Document(text, new HashMap<>(metadata)))
+          .toList();
 
-      vectorStore.add(textSplitter.apply(List.of(document)));
+      vectorStore.add(chunks);
       indexed++;
     }
 
@@ -174,6 +172,14 @@ public class CrawlIngestionService {
         SOURCE,
         sourceUrl
     );
+  }
+
+  /** Pages without sections (for example from an older extractor) are chunked as one section. */
+  private static List<SectionChunker.Section> sectionsOf(ExtractedPage page) {
+    if (page.sections().isEmpty()) {
+      return List.of(new SectionChunker.Section("", page.text()));
+    }
+    return page.sections();
   }
 
   private Map<String, Object> createMetadata(

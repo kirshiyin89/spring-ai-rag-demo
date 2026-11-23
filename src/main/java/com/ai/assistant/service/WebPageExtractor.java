@@ -1,6 +1,9 @@
 
 package com.ai.assistant.service;
 
+import com.ai.assistant.service.SectionChunker.Section;
+import java.util.ArrayList;
+import java.util.List;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -46,10 +49,45 @@ public class WebPageExtractor {
     // document outside the content we are going to keep.
     root.select(NOISE_SELECTOR).remove();
 
+    // Sections keep the headings, which the chunker needs. Built from the same root.
+    List<Section> sections = sectionsOf(root);
+
     // Element.text() already collapses runs of whitespace into single spaces.
     String text = root.text();
 
-    return new ExtractedPage(url, title, category, text);
+    return new ExtractedPage(url, title, category, text, sections);
+  }
+
+  /**
+   * Splits the content of the root into sections at h1, h2 and h3. Each paragraph, list item
+   * and address line is kept as its own line of text, so no text is repeated across sections.
+   */
+  private static List<Section> sectionsOf(Element root) {
+    List<Section> sections = new ArrayList<>();
+    String heading = "";
+    StringBuilder body = new StringBuilder();
+
+    for (Element element : root.select("h1, h2, h3, p, li, address")) {
+      String text = element.text().trim();
+      if (text.isEmpty()) {
+        continue;
+      }
+
+      if (element.tagName().matches("h[123]")) {
+        if (!heading.isEmpty() || body.length() > 0) {
+          sections.add(new Section(heading, body.toString().trim()));
+        }
+        heading = text;
+        body = new StringBuilder();
+      } else {
+        body.append(text).append('\n');
+      }
+    }
+
+    if (!heading.isEmpty() || body.length() > 0) {
+      sections.add(new Section(heading, body.toString().trim()));
+    }
+    return sections;
   }
 
   /**
@@ -58,12 +96,20 @@ public class WebPageExtractor {
    * @param url      the page URL
    * @param title    the content of the {@code <title>} element
    * @param category the value of {@code <meta name="category">}, or empty
-   * @param text     the main text of the page, without navigation or scripts
+   * @param text     the main text of the page, without navigation or scripts; used for the
+   *                 content hash
+   * @param sections the same content split at its headings, used for chunking
    */
   public record ExtractedPage(
       String url,
       String title,
       String category,
-      String text) {
+      String text,
+      List<Section> sections) {
+
+    /** A page without sections; the chunker then uses the whole text as one section. */
+    public ExtractedPage(String url, String title, String category, String text) {
+      this(url, title, category, text, List.of());
+    }
   }
 }

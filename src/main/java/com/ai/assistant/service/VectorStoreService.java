@@ -14,7 +14,6 @@ import java.util.Objects;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -38,7 +37,6 @@ public class VectorStoreService {
 
   private final VectorStore vectorStore;
   private final JdbcTemplate jdbcTemplate;
-  private final TokenTextSplitter textSplitter;
 
   public VectorStoreService(
       VectorStore vectorStore,
@@ -46,10 +44,6 @@ public class VectorStoreService {
   ) {
     this.vectorStore = vectorStore;
     this.jdbcTemplate = jdbcTemplate;
-
-    this.textSplitter = TokenTextSplitter.builder()
-        .withChunkSize(200)
-        .build();
   }
 
   @Transactional(rollbackFor = Exception.class)
@@ -76,7 +70,9 @@ public class VectorStoreService {
         );
       }
 
-      String contentHash = ContentHash.sha256(content);
+      // The chunking version is part of the hash, so a change to the chunking rules
+      // re-indexes files whose content did not change.
+      String contentHash = ContentHash.sha256(SectionChunker.VERSION + "\n" + content);
       Long tenantId = tenant.getId();
 
       // Check the content hash within the current tenant and source only.
@@ -143,10 +139,12 @@ public class VectorStoreService {
       );
       metadata.put("contentHash", contentHash);
 
-      Document document = new Document(content, metadata);
+      List<SectionChunker.Section> sections = SectionChunker.fromMarkdown(content);
+      String title = SectionChunker.titleOf(sections, filename);
 
-      List<Document> chunks =
-          textSplitter.apply(List.of(document));
+      List<Document> chunks = SectionChunker.chunk(title, sections).stream()
+          .map(text -> new Document(text, new HashMap<>(metadata)))
+          .toList();
 
       vectorStore.add(chunks);
 

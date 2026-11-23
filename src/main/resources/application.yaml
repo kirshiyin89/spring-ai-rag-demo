@@ -43,7 +43,10 @@ spring:
 
 app:
   rag:
-    similarity-threshold: 0.35
+    # Minimum similarity for a chunk to be used. Measured with the local embedding model:
+    # 0.35 dropped correct answers (scores of 0.24-0.34); 0.25 kept them with no off-topic
+    # noise, and 0.15 added noise without adding answers. See ChunkingStrategyEvaluationTest.
+    similarity-threshold: 0.25
   public-chat:
     # Origins allowed to call the anonymous Brewly chat endpoint (comma-separated).
     allowed-origins: ${PUBLIC_CHAT_ALLOWED_ORIGINS:http://localhost:3000}
