@@ -1,3 +1,11 @@
+server:
+  # Behind a reverse proxy (Hugging Face Spaces, Cloudflare), read the real client address from
+  # X-Forwarded-For so per-IP limits apply per visitor. "none" keeps local development unchanged.
+  # Only trusted proxy addresses are honoured; see server.tomcat.remoteip.internal-proxies.
+  # This prevents a visitor to pretend to be another visitor and hit more requests. Each visitor gets a bucket, which is a counter with a label. E.g. 10 requests per minute.
+  # The "native" mode is for production. "none" is for local.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+
 spring:
   application:
     name: fintech-ai-assistant
