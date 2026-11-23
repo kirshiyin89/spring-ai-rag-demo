@@ -1,8 +1,12 @@
 package com.ai.assistant.config;
 
 import com.ai.assistant.service.KeywordOverlapDocumentPostProcessor;
+import com.github.benmanes.caffeine.cache.Ticker;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.rag.Query;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
@@ -15,6 +19,7 @@ import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQ
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
@@ -22,7 +27,24 @@ import org.springframework.core.io.Resource;
 
 @Configuration
 @Slf4j
+@EnableConfigurationProperties(ChatMemoryProperties.class)
 public class AiConfig {
+
+  /** Bounded store for chat history; replaces Spring AI's unbounded default. */
+  @Bean
+  ChatMemoryRepository chatMemoryRepository(ChatMemoryProperties properties) {
+    return new BoundedChatMemoryRepository(
+        properties.maxConversations(), properties.idleTimeout(), Ticker.systemTicker());
+  }
+
+  /** Keeps the last {@code maxMessages} messages of each conversation. */
+  @Bean
+  ChatMemory chatMemory(ChatMemoryRepository repository, ChatMemoryProperties properties) {
+    return MessageWindowChatMemory.builder()
+        .chatMemoryRepository(repository)
+        .maxMessages(properties.maxMessages())
+        .build();
+  }
 
   @Bean
   ChatClient chatClient(ChatClient.Builder builder) {

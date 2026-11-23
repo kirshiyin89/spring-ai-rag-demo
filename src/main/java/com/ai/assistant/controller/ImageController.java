@@ -4,6 +4,7 @@ import com.ai.assistant.persistence.Tenant;
 import com.ai.assistant.service.AssistantService;
 import com.ai.assistant.service.ImageAnalysisService;
 import com.ai.assistant.service.TenantService;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -34,7 +35,8 @@ public class ImageController {
   public ResponseEntity<String> analyzeImage(
       @RequestParam String conversationId,
       @RequestPart("image") MultipartFile image,
-      @RequestParam(required = false) String question,
+      @RequestParam(required = false) @Size(max = PublicChatController.MAX_QUESTION_LENGTH)
+      String question,
       Authentication authentication
   ) {
 

@@ -19,6 +19,7 @@
     <testcontainers.version>1.21.3</testcontainers.version>
     <testcontainers.pg-version>2.0.1</testcontainers.pg-version>
     <jsoup.version>1.24.1</jsoup.version>
+    <caffeine.version>3.2.4</caffeine.version>
 
   </properties>
   <dependencies>
@@ -78,6 +79,12 @@
       <groupId>org.jsoup</groupId>
       <artifactId>jsoup</artifactId>
       <version>${jsoup.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+      <version>${caffeine.version}</version>
     </dependency>
 
     <dependency>

@@ -49,6 +49,14 @@ app:
     allowed-origins: ${PUBLIC_CHAT_ALLOWED_ORIGINS:http://localhost:3000}
     # Per client IP limit for the anonymous endpoint.
     max-requests-per-minute: 10
+  chat:
+    memory:
+      # Messages sent to the model per conversation (sliding window).
+      max-messages: 20
+      # Conversations kept in memory; the least recently used is dropped first.
+      max-conversations: 1000
+      # A conversation with no activity for this long is forgotten.
+      idle-timeout: 2h
   crawler:
     max-pages: 50
     max-depth: 5

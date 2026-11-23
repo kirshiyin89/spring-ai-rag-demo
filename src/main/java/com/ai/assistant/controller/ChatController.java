@@ -10,6 +10,7 @@ import com.ai.assistant.service.CrawlSiteUnavailableException;
 import com.ai.assistant.service.TenantService;
 import com.ai.assistant.service.VectorStoreService;
 import java.io.IOException;
+import jakarta.validation.constraints.Size;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -65,7 +66,8 @@ public class ChatController {
   }
 
   @GetMapping("/rag")
-  public String rag(@RequestParam String conversationId, @RequestParam String question,
+  public String rag(@RequestParam String conversationId,
+      @RequestParam @Size(max = PublicChatController.MAX_QUESTION_LENGTH) String question,
       Authentication authentication) {
     Tenant tenant = tenantService.resolveForUsername(authentication.getName());
 

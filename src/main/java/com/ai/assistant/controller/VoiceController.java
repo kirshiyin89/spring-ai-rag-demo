@@ -6,10 +6,12 @@ import com.ai.assistant.service.AssistantService;
 import com.ai.assistant.service.SpeechToTextService;
 import com.ai.assistant.service.TenantService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/voice")
@@ -42,6 +44,11 @@ public class VoiceController {
         Authentication authentication
     ) {
         String question = speechToTextService.transcribe(audio);
+        if (question.length() > PublicChatController.MAX_QUESTION_LENGTH) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Question must be at most " + PublicChatController.MAX_QUESTION_LENGTH + " characters");
+        }
 
         Tenant tenant = tenantService.resolveForUsername(
             authentication.getName()
